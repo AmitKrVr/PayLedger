@@ -74,6 +74,16 @@ const envSchema = z.object({
     RATE_LIMIT_REGISTER_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
     RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().positive().default(20),
     RATE_LIMIT_REFRESH_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+    // One value per running process; must be unique across concurrently
+    // running backend/payment-gateway instances to avoid Snowflake ID
+    // collisions.
+    SNOWFLAKE_WORKER_ID: z.coerce
+        .number()
+        .int()
+        .min(0)
+        .max(1023)
+        .default(0),
 });
 
 export const env = envSchema.parse(process.env);

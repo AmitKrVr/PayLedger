@@ -28,4 +28,10 @@ export const ERROR_MESSAGES = {
     SESSION_NOT_FOUND: 'Authentication session not found',
     SESSION_REVOKED: 'Authentication session has been revoked',
     SESSION_EXPIRED: 'Authentication session has expired',
+
+    WALLET_NOT_FOUND: 'Wallet not found',
+    WALLET_BLOCKED: 'This wallet cannot perform financial operations',
+    INVALID_AMOUNT: 'Amount must be greater than zero',
+    INSUFFICIENT_BALANCE: 'Insufficient available balance',
+    INSUFFICIENT_HELD_AMOUNT: 'Held amount is insufficient for this release',
 } as const;
