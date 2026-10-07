@@ -72,26 +72,5 @@ export const loginSchema = z.object({
         }),
 });
 
-
-export const adminLoginSchema = z.object({
-    mobile: z
-        .string({
-            error: 'Mobile number is required',
-        })
-        .trim()
-        .regex(/^\+?[1-9]\d{9,19}$/, {
-            error: 'Please enter a valid mobile number',
-        }),
-
-    password: z
-        .string({
-            error: 'Password is required',
-        })
-        .min(1, {
-            error: 'Password is required',
-        }),
-});
-
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
-export type AdminLoginInput = z.infer<typeof adminLoginSchema>;

@@ -15,6 +15,7 @@ import {
     ConflictError,
 } from '../../middleware/error.middleware.js';
 import {
+    getDummyPasswordHash,
     hashPassword,
     hashRefreshToken,
     verifyPassword,
@@ -69,22 +70,6 @@ const getSessionExpiry = (): Date => {
         Date.now() +
         env.AUTH_SESSION_TTL_DAYS * 24 * 60 * 60 * 1000,
     );
-};
-
-/**
- * Lazily-computed Argon2id hash of a password nobody will ever enter.
- * Used to run verifyPassword's full cost even when no user was found, so
- * "unknown mobile number" and "wrong password" take the same amount of
- * time and a mobile number can't be enumerated via response timing.
- */
-let dummyPasswordHashPromise: Promise<string> | null = null;
-
-const getDummyPasswordHash = (): Promise<string> => {
-    dummyPasswordHashPromise ??= hashPassword(
-        randomUUID(),
-    );
-
-    return dummyPasswordHashPromise;
 };
 
 const logLoginFailure = (
@@ -433,7 +418,13 @@ export const refresh = async (
 
     const presentedHash = hashRefreshToken(refreshToken);
 
-    return db.transaction(async (tx) => {
+    // Revoking a session and then throwing from inside the SAME
+    // transaction would roll the revocation back along with everything
+    // else — so the two "detected something wrong, kill the session"
+    // branches below commit that revocation and return a sentinel
+    // instead of throwing; the actual rejection is thrown once the
+    // transaction has already committed.
+    const result = await db.transaction(async (tx) => {
         const session = await findSessionByJti(
             payload.jti!,
             tx,
@@ -483,10 +474,7 @@ export const refresh = async (
                 tx,
             );
 
-            throw new AuthenticationError(
-                ERROR_MESSAGES.INVALID_REFRESH_TOKEN,
-                ERROR_CODES.INVALID_REFRESH_TOKEN,
-            );
+            return null;
         }
 
         const user = await findUserById(
@@ -497,10 +485,7 @@ export const refresh = async (
         if (!user || user.status === UserStatus.BLOCKED) {
             await revokeSession(session.id, tx);
 
-            throw new AuthenticationError(
-                ERROR_MESSAGES.INVALID_REFRESH_TOKEN,
-                ERROR_CODES.INVALID_REFRESH_TOKEN,
-            );
+            return null;
         }
 
         if (
@@ -516,23 +501,24 @@ export const refresh = async (
         /*
          * Keep the session JTI stable.
          *
-         * The JWT itself rotates, but the session's JTI identifies
-         * the refresh-token family. The stored hash changes.
-         *
-         * Therefore an old refresh token can still locate the session,
-         * but its hash will no longer match and the session is revoked.
+         * The JWT itself rotates (createRefreshToken signs a new token
+         * with a fresh `iat`, so its hash always changes), but the
+         * session's JTI identifies the refresh-token family and must
+         * NOT be regenerated here. Otherwise a replayed old token would
+         * simply fail to find the session (JTI no longer matches
+         * anything) instead of finding it with a stale hash — which is
+         * what actually triggers reuse detection and revokes the
+         * session below.
          */
-        const newRefreshTokenJti = randomUUID();
-
         const newRefreshToken = await createRefreshToken({
             sub: session.userId,
-            jti: newRefreshTokenJti,
+            jti: session.refreshTokenJti,
         });
 
         await updateSessionToken(
             session.id,
             {
-                refreshTokenJti: newRefreshTokenJti,
+                refreshTokenJti: session.refreshTokenJti,
                 refreshTokenHash:
                     hashRefreshToken(newRefreshToken),
                 lastUsedAt: new Date(),
@@ -566,6 +552,15 @@ export const refresh = async (
             refreshToken: newRefreshToken,
         };
     });
+
+    if (!result) {
+        throw new AuthenticationError(
+            ERROR_MESSAGES.INVALID_REFRESH_TOKEN,
+            ERROR_CODES.INVALID_REFRESH_TOKEN,
+        );
+    }
+
+    return result;
 };
 
 export const logout = async (

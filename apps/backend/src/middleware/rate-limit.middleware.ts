@@ -48,3 +48,15 @@ export const refreshRateLimit = createRateLimit({
     maxRequests: env.RATE_LIMIT_REFRESH_MAX,
     windowSeconds: env.RATE_LIMIT_REFRESH_WINDOW_SECONDS,
 });
+
+export const adminLoginRateLimit = createRateLimit({
+    prefix: 'admin:login',
+    maxRequests: env.RATE_LIMIT_LOGIN_MAX,
+    windowSeconds: env.RATE_LIMIT_LOGIN_WINDOW_SECONDS,
+});
+
+export const adminRefreshRateLimit = createRateLimit({
+    prefix: 'admin:refresh',
+    maxRequests: env.RATE_LIMIT_REFRESH_MAX,
+    windowSeconds: env.RATE_LIMIT_REFRESH_WINDOW_SECONDS,
+});

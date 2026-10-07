@@ -1,7 +1,9 @@
-import { Router } from "express";
+import { Router } from 'express';
 
-const adminRouter = Router()
+import adminAuthRoutes from '../../../domains/admin-auth/admin-auth.routes.js';
 
+const adminRouter = Router();
 
+adminRouter.use('/auth', adminAuthRoutes);
 
 export default adminRouter;
