@@ -34,4 +34,9 @@ export const ERROR_MESSAGES = {
     INVALID_AMOUNT: 'Amount must be greater than zero',
     INSUFFICIENT_BALANCE: 'Insufficient available balance',
     INSUFFICIENT_HELD_AMOUNT: 'Held amount is insufficient for this release',
+
+    PAYMENT_NOT_FOUND: 'Payment not found',
+    PAYMENT_AMOUNT_MISMATCH: 'Webhook amount does not match the payment amount',
+    PAYMENT_PROVIDER_MISMATCH: 'Webhook provider does not match the payment provider',
+    INVALID_WEBHOOK_SIGNATURE: 'Invalid webhook signature',
 } as const;

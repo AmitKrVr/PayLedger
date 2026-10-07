@@ -1,7 +1,7 @@
 import compression from 'compression';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
-import express from 'express';
+import express, { type Request } from 'express';
 import helmet from 'helmet';
 
 import { env } from '@payledger/config';
@@ -36,6 +36,13 @@ app.use(cookieParser());
 app.use(
     express.json({
         limit: '1mb',
+        // Webhook signature verification needs the exact bytes that were
+        // signed, not a re-serialized version of the parsed body — capture
+        // them here once, globally, rather than running a second body
+        // parser just for the webhook route.
+        verify: (req, _res, buf) => {
+            (req as Request).rawBody = buf;
+        },
     }),
 );
 

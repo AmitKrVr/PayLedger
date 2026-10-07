@@ -84,6 +84,15 @@ const envSchema = z.object({
         .min(0)
         .max(1023)
         .default(0),
+
+    PAYMENT_MIN_DEPOSIT_INR: z.coerce.number().int().positive().default(100),
+    PAYMENT_MAX_DEPOSIT_INR: z.coerce.number().int().positive().default(25_000),
+    PAYMENT_EXPIRY_MINUTES: z.coerce.number().int().positive().default(15),
+    PAYMENT_GATEWAY_BASE_URL: z
+        .string()
+        .min(1)
+        .default('http://localhost:5002'),
+    PAYMENT_WEBHOOK_SECRET: z.string().min(32),
 });
 
 export const env = envSchema.parse(process.env);

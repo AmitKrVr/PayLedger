@@ -12,6 +12,9 @@ declare global {
 
             cookies: Record<string, string>;
 
+            /** Raw JSON request body bytes, captured for webhook signature verification. */
+            rawBody?: Buffer;
+
             user?: UserAuthContext;
 
             admin?: AdminAuthContext;

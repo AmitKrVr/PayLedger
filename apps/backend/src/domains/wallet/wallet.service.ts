@@ -1,13 +1,10 @@
 import { ERROR_CODES } from '../../constants/response.constants.js';
 import { ERROR_MESSAGES } from '../../constants/message.constants.js';
+import { paiseToInr } from '../../lib/money.js';
 import { NotFoundError } from '../../middleware/error.middleware.js';
 
 import { findWalletByUserId } from './wallet.repository.js';
 import type { WalletResponse } from './wallet.types.js';
-
-const PAISE_PER_INR = 100;
-
-const paiseToInr = (paise: bigint): number => Number(paise) / PAISE_PER_INR;
 
 export const getWallet = async (
     userId: string,
