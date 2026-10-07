@@ -93,6 +93,19 @@ const envSchema = z.object({
         .min(1)
         .default('http://localhost:5002'),
     PAYMENT_WEBHOOK_SECRET: z.string().min(32),
+
+    TRANSFER_MAX_AMOUNT_INR: z.coerce.number().int().positive().default(25_000),
+    TRANSFER_DAILY_LIMIT_INR: z.coerce.number().int().positive().default(50_000),
+    TRANSFER_FEE_PERCENT: z.coerce.number().int().positive().default(1),
+    TRANSFER_FEE_MIN_INR: z.coerce.number().int().positive().default(1),
+    TRANSFER_FEE_MAX_INR: z.coerce.number().int().positive().default(20),
+
+    WITHDRAWAL_MIN_AMOUNT_INR: z.coerce.number().int().positive().default(100),
+    WITHDRAWAL_MAX_AMOUNT_INR: z.coerce
+        .number()
+        .int()
+        .positive()
+        .default(25_000),
 });
 
 export const env = envSchema.parse(process.env);
