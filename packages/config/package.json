@@ -1,0 +1,19 @@
+{
+    "name": "@payledger/config",
+    "version": "1.0.0",
+    "private": true,
+    "type": "module",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "scripts": {
+        "build": "tsc",
+        "check-types": "tsc --noEmit"
+    },
+    "devDependencies": {
+        "@types/node": "^26.6.4",
+        "typescript": "^7.0.2"
+    },
+    "dependencies": {
+        "zod": "^4.6.5"
+    }
+}

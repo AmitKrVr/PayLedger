@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1791352284061,
+      "tag": "0000_wooden_outlaw_kid",
+      "breakpoints": true
+    }
+  ]
+}
