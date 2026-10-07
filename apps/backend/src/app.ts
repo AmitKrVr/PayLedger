@@ -10,6 +10,7 @@ import { requestIdMiddleware } from './middleware/request-id.middleware.js';
 import { requestLoggerMiddleware } from './middleware/request-logger.middleware.js';
 import healthRoutes from './routes/health.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
+import V1Router from './routes/index.js';
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use(
 );
 
 app.use('/health', healthRoutes);
+app.use('/api/v1', V1Router);
 
 
 app.use(notFoundHandler);

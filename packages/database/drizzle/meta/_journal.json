@@ -8,6 +8,13 @@
       "when": 1791352284061,
       "tag": "0000_wooden_outlaw_kid",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1791369638034,
+      "tag": "0001_sturdy_ghost_rider",
+      "breakpoints": true
     }
   ]
 }

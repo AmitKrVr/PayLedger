@@ -1,3 +1,5 @@
+import { AdminRole } from "@payledger/database";
+
 export { };
 
 declare global {
@@ -7,6 +9,19 @@ declare global {
             validatedQuery?: unknown;
             validatedParams?: unknown;
             validatedHeaders?: unknown;
+
+            cookies: Record<string, string>;
+
+            user?: {
+                userId: string;
+                sessionId: string;
+            };
+
+            admin?: {
+                adminId: string;
+                sessionId: string;
+                role: AdminRole;
+            };
         }
     }
 }

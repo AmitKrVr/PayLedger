@@ -7,3 +7,5 @@ export {
     type Transaction,
     type DatabaseOrTransaction,
 } from './client.js';
+
+export * from './schema/index.js';

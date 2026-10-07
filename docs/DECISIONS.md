@@ -94,7 +94,7 @@ Internal validation details such as raw Zod errors are never exposed to clients.
 
 ## 8. ID Strategy
 
-UUIDv7 is used for internal database primary keys.
+UUIDv4 is used for internal database primary keys.
 
 Snowflake IDs are used for business identifiers and are encoded using Base32 before being exposed externally.
 

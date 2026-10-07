@@ -224,7 +224,7 @@ Two ID strategies are used for different purposes.
 
 ### Internal IDs
 
-UUIDv7 is used for database primary keys.
+UUIDv4 is used for database primary keys.
 
 ```text
 users.id

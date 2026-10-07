@@ -1,0 +1,20 @@
+export const AUTH_COOKIE_NAMES = {
+    ACCESS_TOKEN: 'access_token',
+    REFRESH_TOKEN: 'refresh_token',
+} as const;
+
+export const AUTH_LIMITS = {
+    PASSWORD_MIN_LENGTH: 8,
+    PASSWORD_MAX_LENGTH: 128,
+
+    NAME_MIN_LENGTH: 2,
+    NAME_MAX_LENGTH: 100,
+
+    MOBILE_MIN_LENGTH: 10,
+    MOBILE_MAX_LENGTH: 20,
+
+    EMAIL_MAX_LENGTH: 255,
+
+    MAX_FAILED_LOGIN_ATTEMPTS: 5,
+    LOGIN_LOCK_DURATION_MINUTES: 15,
+} as const;

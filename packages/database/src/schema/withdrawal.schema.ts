@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 export const withdrawals = pgTable(
     'withdrawals',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         transactionId: uuid('transaction_id').references(
             () => transactions.id,

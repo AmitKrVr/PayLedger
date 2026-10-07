@@ -18,7 +18,7 @@ import {
 export const users = pgTable(
     'users',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
         name: varchar('name', { length: 100 }).notNull(),
         mobile: varchar('mobile', { length: 20 }).notNull().unique(),
         email: varchar('email', { length: 255 }).unique(),
@@ -43,7 +43,7 @@ export const users = pgTable(
 export const userSessions = pgTable(
     'user_sessions',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
         userId: uuid('user_id')
             .notNull()
             .references(() => users.id, { onDelete: 'cascade' }),
@@ -72,7 +72,7 @@ export const userSessions = pgTable(
 export const admins = pgTable(
     'admins',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
         name: varchar('name', { length: 100 }).notNull(),
         mobile: varchar('mobile', { length: 20 }).notNull().unique(),
         email: varchar('email', { length: 255 }).notNull().unique(),
@@ -98,7 +98,7 @@ export const admins = pgTable(
 export const adminSessions = pgTable(
     'admin_sessions',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
         adminId: uuid('admin_id')
             .notNull()
             .references(() => admins.id, { onDelete: 'cascade' }),

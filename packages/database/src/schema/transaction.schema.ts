@@ -17,7 +17,7 @@ import { users } from './identity.schema.js';
 export const transactions = pgTable(
     'transactions',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         referenceId: varchar('reference_id', { length: 32 })
             .notNull()

@@ -17,7 +17,7 @@ import { admins, users } from './identity.schema.js';
 export const auditLogs = pgTable(
     'audit_logs',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         actorType: auditActorTypeEnum('actor_type').notNull(),
 

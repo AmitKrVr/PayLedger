@@ -16,7 +16,7 @@ import { wallets } from './wallet.schema.js';
 export const transfers = pgTable(
     'transfers',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         transactionId: uuid('transaction_id')
             .notNull()

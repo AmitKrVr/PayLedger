@@ -19,7 +19,7 @@ import { users } from './identity.schema.js';
 export const wallets = pgTable(
     'wallets',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         userId: uuid('user_id').references(() => users.id, {
             onDelete: 'restrict',

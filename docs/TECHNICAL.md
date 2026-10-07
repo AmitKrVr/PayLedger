@@ -369,7 +369,7 @@ PayLedger uses two ID strategies.
 
 ### Internal IDs
 
-UUIDv7 is used for PostgreSQL primary keys.
+UUIDv4 is used for PostgreSQL primary keys.
 
 ### Business IDs
 

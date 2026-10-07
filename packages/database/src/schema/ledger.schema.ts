@@ -15,7 +15,7 @@ import { sql } from 'drizzle-orm';
 export const ledgerEntries = pgTable(
     'ledger_entries',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         transactionId: uuid('transaction_id')
             .notNull()

@@ -18,7 +18,7 @@ import { sql } from 'drizzle-orm';
 export const payments = pgTable(
     'payments',
     {
-        id: uuid('id').primaryKey(),
+        id: uuid('id').primaryKey().defaultRandom(),
 
         userId: uuid('user_id')
             .notNull()
