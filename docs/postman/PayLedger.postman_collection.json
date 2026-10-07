@@ -1,0 +1,587 @@
+{
+	"info": {
+		"_postman_id": "b3e04771-419b-4f93-b6dc-d306a75f8221",
+		"name": "PayLedger API",
+		"description": "Postman collection for all currently implemented PayLedger backend APIs.\n\n### Base URL\n`http://localhost:5001/api/v1`\n\n### Authentication & Security Architecture\n- **Access Tokens**: Short-lived (15 minutes) stateless JWTs.\n- **Refresh Tokens**: Long-lived (30 days) stateful tokens with cryptographic SHA-256 hashes persisted in PostgreSQL `user_sessions`.\n- **Cookie Transport**: Authentication tokens are stored and transmitted exclusively via HTTP-only, Secure, SameSite cookies (`access_token` and `refresh_token`). Tokens are never returned in JSON response bodies.\n- **Rate Limiting**: Express middleware backed by Redis enforces sliding window IP rate limits across authentication endpoints.\n- **Account Lockout**: 5 consecutive failed login attempts trigger an automatic 15-minute account lockout.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:5001/api/v1",
+			"type": "string"
+		},
+		{
+			"key": "serverUrl",
+			"value": "http://localhost:5001",
+			"type": "string"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"description": "User authentication endpoints: registration, credential login, token rotation, and logout.",
+			"item": [
+				{
+					"name": "Register User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Amit Kumar\",\n  \"mobile\": \"9876543210\",\n  \"email\": \"amit@example.com\",\n  \"password\": \"Password123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/register",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"register"
+							]
+						},
+						"description": "Registers a new user account, creates an initial wallet with 0 balance, establishes an authenticated session, and writes an audit log in a single atomic database transaction.\n\n### Requirements\n- **name**: String (2 to 100 characters).\n- **mobile**: Valid 10-digit Indian mobile number (`^[6-9]\\d{9}$`).\n- **email**: Optional string (valid email format, max 255 characters).\n- **password**: String (8 to 128 characters).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m expiry)\n- `refresh_token` (HTTP-only, 30d expiry)"
+					},
+					"response": [
+						{
+							"name": "201 Created - Registration Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Amit Kumar\",\n  \"mobile\": \"9876543210\",\n  \"email\": \"amit@example.com\",\n  \"password\": \"Password123!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/register",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"register"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"CREATED\",\n  \"message\": \"Account registered successfully\",\n  \"requestId\": \"c45d385f-a1e9-45fe-8058-6a9ea2803b2c\",\n  \"data\": {\n    \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n    \"name\": \"Amit Kumar\",\n    \"mobile\": \"9876543210\",\n    \"email\": \"amit@example.com\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-07T11:55:48.477Z\"\n  }\n}"
+						},
+						{
+							"name": "409 Conflict - Mobile Already Exists",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"Amit Kumar\",\n  \"mobile\": \"9876543210\",\n  \"password\": \"Password123!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/register",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"register"
+									]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"CONFLICT\",\n  \"message\": \"A user with this mobile number already exists\",\n  \"requestId\": \"de3a0346-11c3-4458-aba7-269e95a82356\"\n}"
+						},
+						{
+							"name": "422 Unprocessable Entity - Validation Error",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"A\",\n  \"mobile\": \"12345\",\n  \"password\": \"short\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/register",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"register"
+									]
+								}
+							},
+							"status": "Unprocessable Entity",
+							"code": 422,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"VALIDATION_ERROR\",\n  \"message\": \"Validation failed\",\n  \"requestId\": \"24fc3041-8f55-46aa-8367-9d7a5b3a9856\",\n  \"errors\": [\n    {\n      \"field\": \"name\",\n      \"message\": \"Name must be at least 2 characters\"\n    },\n    {\n      \"field\": \"mobile\",\n      \"message\": \"Please enter a valid Indian mobile number\"\n    },\n    {\n      \"field\": \"password\",\n      \"message\": \"Password must be at least 8 characters\"\n    }\n  ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"Password123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"login"
+							]
+						},
+						"description": "Authenticates an existing user using their registered mobile number and password verified with Argon2id.\n\n### Security & Policy Rules\n- **No User Enumeration**: Returns generic `INVALID_CREDENTIALS` for both non-existent users and wrong passwords.\n- **Account Lockout**: 5 failed login attempts will temporarily lock the account for 15 minutes (`locked_until`).\n- **Rate Limiting**: IP rate limited via Redis middleware (`RATE_LIMIT_LOGIN_MAX` requests per `RATE_LIMIT_LOGIN_WINDOW_SECONDS`).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m expiry)\n- `refresh_token` (HTTP-only, 30d expiry)"
+					},
+					"response": [
+						{
+							"name": "200 OK - Login Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"Password123!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Login successful\",\n  \"requestId\": \"93bf4829-afae-4376-8aa2-f22e3354d2bd\",\n  \"data\": {\n    \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n    \"name\": \"Amit Kumar\",\n    \"mobile\": \"9876543210\",\n    \"email\": \"amit@example.com\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-07T11:55:48.477Z\"\n  }\n}"
+						},
+						{
+							"name": "401 Unauthorized - Invalid Credentials",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"WrongPassword!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"INVALID_CREDENTIALS\",\n  \"message\": \"Invalid mobile number or password\",\n  \"requestId\": \"152dbc05-a8c8-4473-901d-f4e02a1f2868\"\n}"
+						},
+						{
+							"name": "401 Unauthorized - Account Locked",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"WrongPassword!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"ACCOUNT_LOCKED\",\n  \"message\": \"Your account is temporarily locked\",\n  \"requestId\": \"25da8bf5-9fac-4a98-82fa-f178927c226b\"\n}"
+						},
+						{
+							"name": "429 Too Many Requests - Rate Limit Exceeded",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"Password123!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "Too Many Requests",
+							"code": 429,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"RATE_LIMIT_EXCEEDED\",\n  \"message\": \"Too many requests. Please try again later.\",\n  \"requestId\": \"5f4a35da-3cf4-42f5-b8a1-5c8e4d5e9fcb\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Rotates authentication tokens using the presentation of the valid HTTP-only `refresh_token` cookie.\n\n### Mechanics\n- Reads `refresh_token` from request cookies.\n- Verifies JWT integrity and cryptographic SHA-256 hash match against active session in PostgreSQL.\n- **Replay Protection**: If a previously used refresh token hash is presented, the session is flagged as compromised and revoked immediately.\n- Upon validation, rotates the refresh token and issues a new access token, updating the cookies.\n\n### Cookies Sent\n- `refresh_token` (HTTP-only cookie)\n\n### Cookies Received\n- New `access_token`\n- New rotated `refresh_token`"
+					},
+					"response": [
+						{
+							"name": "200 OK - Token Refreshed Successfully",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/auth/refresh",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"refresh"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Token refreshed successfully\",\n  \"requestId\": \"a7dd3a19-1a7d-4ba2-8dbd-fc7f7ece0fc5\",\n  \"data\": null\n}"
+						},
+						{
+							"name": "401 Unauthorized - Missing / Invalid Refresh Token",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/auth/refresh",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"refresh"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"INVALID_REFRESH_TOKEN\",\n  \"message\": \"Invalid or expired refresh token\",\n  \"requestId\": \"0f31c683-e7e9-4ad3-86f7-403a9e3eba4e\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Logout User",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Logs out the current user session idempotently.\n\n### Mechanics\n- Reads `refresh_token` or `access_token` from cookies to identify and revoke the session in PostgreSQL `user_sessions`.\n- Clears `access_token` and `refresh_token` cookies on the client response.\n- Idempotent: Does not fail even if cookies are missing or the session has already expired.\n\n### Cookies Cleared\n- `access_token`\n- `refresh_token`"
+					},
+					"response": [
+						{
+							"name": "200 OK - Logout Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/auth/logout",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"logout"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Logout successful\",\n  \"requestId\": \"24b4896c-0897-44f7-b3db-f6045661057b\",\n  \"data\": null\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "System",
+			"description": "System health and service readiness endpoints.",
+			"item": [
+				{
+					"name": "Health Check",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{serverUrl}}/health",
+							"host": [
+								"{{serverUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Health check probe endpoint to verify that the backend API server is running."
+					},
+					"response": [
+						{
+							"name": "200 OK - Healthy",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{serverUrl}}/health",
+									"host": [
+										"{{serverUrl}}"
+									],
+									"path": [
+										"health"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"status\": \"ok\"\n}"
+						}
+					]
+				}
+			]
+		}
+	]
+}

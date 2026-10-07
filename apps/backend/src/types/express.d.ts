@@ -1,4 +1,4 @@
-import { AdminRole } from "@payledger/database";
+import type { AdminAuthContext, UserAuthContext } from '../domains/auth/auth.types.js';
 
 export { };
 
@@ -12,16 +12,9 @@ declare global {
 
             cookies: Record<string, string>;
 
-            user?: {
-                userId: string;
-                sessionId: string;
-            };
+            user?: UserAuthContext;
 
-            admin?: {
-                adminId: string;
-                sessionId: string;
-                role: AdminRole;
-            };
+            admin?: AdminAuthContext;
         }
     }
 }

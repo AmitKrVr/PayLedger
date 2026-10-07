@@ -10,13 +10,13 @@ import { requestIdMiddleware } from './middleware/request-id.middleware.js';
 import { requestLoggerMiddleware } from './middleware/request-logger.middleware.js';
 import healthRoutes from './routes/health.routes.js';
 import { errorHandler, notFoundHandler } from './middleware/error.middleware.js';
-import V1Router from './routes/index.js';
+import apiRouter from './routes/index.js';
 
 const app = express();
 
 app.disable('x-powered-by');
 
-app.set('trust proxy', false);
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.use(compression());
@@ -46,7 +46,7 @@ app.use(
 );
 
 app.use('/health', healthRoutes);
-app.use('/api/v1', V1Router);
+app.use('/api', apiRouter);
 
 
 app.use(notFoundHandler);

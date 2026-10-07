@@ -1,40 +1,32 @@
 import type { JWTPayload } from 'jose';
 import type { RequestHandler } from 'express';
 
-import {
-    AdminRole,
-    type AdminRole as AdminRoleType,
-} from '@payledger/database';
+import { AdminRole } from '@payledger/database';
 
 import { AuthenticationError } from './error.middleware.js';
 import { getAccessTokenCookieName } from '../lib/auth/cookies.js';
-import { verifyAccessToken } from '../lib/auth/jwt.js';
-
-type UserAccessTokenClaims = {
-    sub: string;
-    sid: string;
-};
-
-type AdminAccessTokenClaims = {
-    sub: string;
-    sid: string;
-    role: AdminRoleType;
-};
+import {
+    verifyAccessToken,
+    type AdminAccessTokenPayload,
+    type UserAccessTokenPayload,
+} from '../lib/auth/jwt.js';
+import { ERROR_MESSAGES } from '../constants/message.constants.js';
+import { ERROR_CODES } from '../constants/response.constants.js';
 
 const isAdminRole = (
     value: unknown,
-): value is AdminRoleType => {
+): value is AdminRole => {
     return (
         typeof value === 'string' &&
         Object.values(AdminRole).includes(
-            value as AdminRoleType,
+            value as AdminRole,
         )
     );
 };
 
 const isUserAccessTokenPayload = (
     payload: JWTPayload,
-): payload is JWTPayload & UserAccessTokenClaims => {
+): payload is JWTPayload & UserAccessTokenPayload => {
     return (
         typeof payload.sub === 'string' &&
         typeof payload.sid === 'string' &&
@@ -44,7 +36,7 @@ const isUserAccessTokenPayload = (
 
 const isAdminAccessTokenPayload = (
     payload: JWTPayload,
-): payload is JWTPayload & AdminAccessTokenClaims => {
+): payload is JWTPayload & AdminAccessTokenPayload => {
     return (
         typeof payload.sub === 'string' &&
         typeof payload.sid === 'string' &&
@@ -55,7 +47,9 @@ const isAdminAccessTokenPayload = (
 const getAccessToken = (
     req: Express.Request,
 ): string | null => {
-    const token = req.cookies?.[getAccessTokenCookieName()];
+    const token = req.cookies?.[
+        getAccessTokenCookieName()
+    ];
 
     return typeof token === 'string' ? token : null;
 };
@@ -70,21 +64,22 @@ export const requireUserAuth: RequestHandler = async (
     if (!token) {
         next(
             new AuthenticationError(
-                'Authentication token is required',
-                'AUTHENTICATION_REQUIRED',
+                ERROR_MESSAGES.UNAUTHORIZED,
+                ERROR_CODES.UNAUTHORIZED,
             ),
         );
         return;
     }
 
     try {
-        const { payload } = await verifyAccessToken(token);
+        const { payload } =
+            await verifyAccessToken(token);
 
         if (!isUserAccessTokenPayload(payload)) {
             next(
                 new AuthenticationError(
-                    'Invalid access token',
-                    'INVALID_TOKEN',
+                    ERROR_MESSAGES.INVALID_TOKEN,
+                    ERROR_CODES.INVALID_TOKEN,
                 ),
             );
             return;
@@ -99,8 +94,8 @@ export const requireUserAuth: RequestHandler = async (
     } catch {
         next(
             new AuthenticationError(
-                'Invalid or expired access token',
-                'INVALID_TOKEN',
+                ERROR_MESSAGES.INVALID_TOKEN,
+                ERROR_CODES.INVALID_TOKEN,
             ),
         );
     }
@@ -116,21 +111,22 @@ export const requireAdminAuth: RequestHandler = async (
     if (!token) {
         next(
             new AuthenticationError(
-                'Authentication token is required',
-                'AUTHENTICATION_REQUIRED',
+                ERROR_MESSAGES.UNAUTHORIZED,
+                ERROR_CODES.UNAUTHORIZED,
             ),
         );
         return;
     }
 
     try {
-        const { payload } = await verifyAccessToken(token);
+        const { payload } =
+            await verifyAccessToken(token);
 
         if (!isAdminAccessTokenPayload(payload)) {
             next(
                 new AuthenticationError(
-                    'Invalid admin access token',
-                    'INVALID_TOKEN',
+                    ERROR_MESSAGES.INVALID_TOKEN,
+                    ERROR_CODES.INVALID_TOKEN,
                 ),
             );
             return;
@@ -146,8 +142,8 @@ export const requireAdminAuth: RequestHandler = async (
     } catch {
         next(
             new AuthenticationError(
-                'Invalid or expired access token',
-                'INVALID_TOKEN',
+                ERROR_MESSAGES.INVALID_TOKEN,
+                ERROR_CODES.INVALID_TOKEN,
             ),
         );
     }

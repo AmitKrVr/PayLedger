@@ -23,7 +23,7 @@ export type AdminAccessTokenPayload = {
 };
 
 export type RefreshTokenPayload = {
-    sid: string;
+    sub: string;
     jti: string;
 };
 
@@ -61,11 +61,9 @@ export const createAdminAccessToken = async (
 export const createRefreshToken = async (
     payload: RefreshTokenPayload,
 ): Promise<string> => {
-    return new SignJWT({
-        sid: payload.sid,
-    })
+    return new SignJWT()
         .setProtectedHeader({ alg: 'HS256' })
-        .setSubject(payload.sid)
+        .setSubject(payload.sub)
         .setJti(payload.jti)
         .setIssuer(env.JWT_ISSUER)
         .setAudience(env.JWT_AUDIENCE)

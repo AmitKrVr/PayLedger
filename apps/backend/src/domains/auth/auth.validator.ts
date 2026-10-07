@@ -12,10 +12,10 @@ export const registerSchema = z.object({
             error: 'Name is required',
         })
         .trim()
-        .min(2, {
+        .min(AUTH_LIMITS.NAME_MIN_LENGTH, {
             error: `Name must be at least ${AUTH_LIMITS.NAME_MIN_LENGTH} characters`,
         })
-        .max(100, {
+        .max(AUTH_LIMITS.NAME_MAX_LENGTH, {
             error: `Name must not exceed ${AUTH_LIMITS.NAME_MAX_LENGTH} characters`,
         }),
 
@@ -36,8 +36,8 @@ export const registerSchema = z.object({
         .regex(EMAIL_REGEX, {
             error: 'Please enter a valid email address',
         })
-        .max(255, {
-            error: 'Email must not exceed 255 characters',
+        .max(AUTH_LIMITS.EMAIL_MAX_LENGTH, {
+            error: `Email must not exceed ${AUTH_LIMITS.EMAIL_MAX_LENGTH} characters`,
         })
         .optional(),
 
@@ -45,10 +45,10 @@ export const registerSchema = z.object({
         .string({
             error: 'Password is required',
         })
-        .min(8, {
+        .min(AUTH_LIMITS.PASSWORD_MIN_LENGTH, {
             error: `Password must be at least ${AUTH_LIMITS.PASSWORD_MIN_LENGTH} characters`,
         })
-        .max(128, {
+        .max(AUTH_LIMITS.PASSWORD_MAX_LENGTH, {
             error: `Password must not exceed ${AUTH_LIMITS.PASSWORD_MAX_LENGTH} characters`,
         }),
 });

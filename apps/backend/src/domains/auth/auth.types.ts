@@ -1,4 +1,4 @@
-import type { AdminRole } from '@payledger/database';
+import type { AdminRole, users } from '@payledger/database';
 
 export type UserAuthContext = {
     userId: string;
@@ -17,6 +17,10 @@ export type SessionDeviceInfo = {
     userAgent?: string;
 };
 
+export type RequestContext = SessionDeviceInfo & {
+    requestId?: string;
+};
+
 export type CreateUserSessionInput = SessionDeviceInfo & {
     userId: string;
     refreshTokenJti: string;
@@ -29,4 +33,15 @@ export type CreateAdminSessionInput = SessionDeviceInfo & {
     refreshTokenJti: string;
     refreshTokenHash: string;
     expiresAt: Date;
+};
+
+export type AuthUser = Pick<
+    typeof users.$inferSelect,
+    'id' | 'name' | 'mobile' | 'email' | 'status' | 'createdAt'
+>;
+
+export type AuthResult = {
+    user: AuthUser;
+    accessToken: string;
+    refreshToken: string;
 };

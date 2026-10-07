@@ -28,23 +28,18 @@ const envSchema = z.object({
         .default(5002),
 
     DATABASE_URL: z.string().min(1),
-
     DATABASE_POOL_MAX: z.coerce.number().int().positive().default(10),
-
     DATABASE_POOL_MIN: z.coerce.number().int().nonnegative().default(2),
-
     DATABASE_IDLE_TIMEOUT_MS: z.coerce
         .number()
         .int()
         .positive()
         .default(30_000),
-
     DATABASE_CONNECTION_TIMEOUT_MS: z.coerce
         .number()
         .int()
         .positive()
         .default(5_000),
-
     DATABASE_STATEMENT_TIMEOUT_MS: z.coerce
         .number()
         .int()
@@ -64,16 +59,21 @@ const envSchema = z.object({
         ),
 
     JWT_ACCESS_SECRET: z.string().min(32),
-
     JWT_REFRESH_SECRET: z.string().min(32),
-
     JWT_ISSUER: z.string().min(1),
-
     JWT_AUDIENCE: z.string().min(1),
-
     JWT_ACCESS_TTL: z.string().min(1).default('15m'),
-
     JWT_REFRESH_TTL: z.string().min(1).default('30d'),
+
+    AUTH_MAX_FAILED_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(5),
+    AUTH_LOCK_DURATION_MINUTES: z.coerce.number().int().positive().default(15),
+    AUTH_SESSION_TTL_DAYS: z.coerce.number().int().positive().default(30),
+    RATE_LIMIT_LOGIN_MAX: z.coerce.number().int().positive().default(10),
+    RATE_LIMIT_LOGIN_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+    RATE_LIMIT_REGISTER_MAX: z.coerce.number().int().positive().default(5),
+    RATE_LIMIT_REGISTER_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+    RATE_LIMIT_REFRESH_MAX: z.coerce.number().int().positive().default(20),
+    RATE_LIMIT_REFRESH_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
 });
 
 export const env = envSchema.parse(process.env);
