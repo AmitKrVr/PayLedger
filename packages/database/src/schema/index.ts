@@ -2,6 +2,7 @@ export * from './identity.schema.js';
 export * from './audit.schema.js';
 export * from './wallet.schema.js';
 export * from './payment.schema.js';
+export * from './gateway-payment.schema.js';
 export * from './transaction.schema.js';
 export * from './ledger.schema.js';
 export * from './transfer.schema.js';

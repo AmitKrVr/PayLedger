@@ -79,7 +79,7 @@ const postWebhook = (payload: Record<string, unknown>, signature?: string) => {
     return request(app)
         .post('/api/v1/payments/webhook')
         .set('Content-Type', 'application/json')
-        .set('x-webhook-signature', sig)
+        .set('x-payment-gateway-signature', sig)
         .send(rawBody);
 };
 
@@ -261,7 +261,7 @@ describe('Payment domain', () => {
                     orderId: created.body.data.orderId,
                     paymentId: randomUUID(),
                     status: 'SUCCESS',
-                    amount: 1000,
+                    amount: 100000,
                 },
                 '0'.repeat(64),
             );
@@ -285,7 +285,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS',
-                amount: 900,
+                amount: 90000,
             });
 
             expect(res.status).toBe(422);
@@ -306,7 +306,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'FAILED',
-                amount: 1000,
+                amount: 100000,
                 failureReason: 'insufficient funds at bank',
             });
 
@@ -336,7 +336,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS',
-                amount: 1000,
+                amount: 100000,
             });
 
             expect(res.status).toBe(200);
@@ -364,7 +364,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS',
-                amount: 1000,
+                amount: 100000,
             });
 
             expect(res.status).toBe(200);
@@ -388,7 +388,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: gatewayPaymentId,
                 status: 'SUCCESS',
-                amount: 1000,
+                amount: 100000,
             });
 
             expect(res.status).toBe(200);
@@ -432,7 +432,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS' as const,
-                amount: 1000,
+                amount: 100000,
             };
 
             for (let i = 0; i < 5; i += 1) {
@@ -467,7 +467,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS' as const,
-                amount: 1000,
+                amount: 100000,
             };
 
             const results = await Promise.all(
@@ -496,7 +496,7 @@ describe('Payment domain', () => {
                 orderId: created.body.data.orderId,
                 paymentId: randomUUID(),
                 status: 'SUCCESS',
-                amount: 1000,
+                amount: 100000,
             });
 
             expect(res.status).toBe(422);

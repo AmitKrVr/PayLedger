@@ -30,8 +30,11 @@ export const webhookPayloadSchema = z.object({
     status: z.enum(['SUCCESS', 'FAILED'], {
         error: 'status must be SUCCESS or FAILED',
     }),
+    // Paise, matching the Fake Payment Gateway's webhook contract —
+    // unlike createPaymentSchema.amount above, this is NOT INR.
     amount: z
         .number({ error: 'amount is required' })
+        .int({ error: 'amount must be an integer number of paise' })
         .positive({ error: 'amount must be greater than zero' }),
     failureReason: z.string().max(500).optional(),
 });

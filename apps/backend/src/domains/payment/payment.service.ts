@@ -189,7 +189,9 @@ export const processPaymentWebhook = async (
             return;
         }
 
-        const webhookAmountPaise = inrToPaise(payload.amount);
+        // payload.amount is already paise (the gateway's wire format),
+        // unlike the INR amount the user originally requested.
+        const webhookAmountPaise = BigInt(payload.amount);
 
         if (webhookAmountPaise !== payment.amountPaise) {
             throw new BusinessRuleError(

@@ -94,6 +94,14 @@ const envSchema = z.object({
         .default('http://localhost:5002'),
     PAYMENT_WEBHOOK_SECRET: z.string().min(32),
 
+    // Where the Fake Payment Gateway sends its signed webhook back to
+    // PayLedger backend. Shares PAYMENT_WEBHOOK_SECRET as the HMAC key —
+    // one secret, both sides of the same config package.
+    PAYLEDGER_WEBHOOK_URL: z
+        .string()
+        .min(1)
+        .default('http://localhost:5001/api/v1/payments/webhook'),
+
     TRANSFER_MAX_AMOUNT_INR: z.coerce.number().int().positive().default(25_000),
     TRANSFER_DAILY_LIMIT_INR: z.coerce.number().int().positive().default(50_000),
     TRANSFER_FEE_PERCENT: z.coerce.number().int().positive().default(1),

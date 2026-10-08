@@ -139,9 +139,21 @@ importers:
 
   apps/payment-gateway:
     dependencies:
+      '@payledger/config':
+        specifier: workspace:*
+        version: link:../../packages/config
+      '@payledger/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      drizzle-orm:
+        specifier: ^0.45.2
+        version: 0.45.3(@types/pg@8.23.1)(pg@8.23.1)
       express:
         specifier: ^5.2.1
         version: 5.2.1(supports-color@7.2.0)
+      pino:
+        specifier: ^10.4.0
+        version: 10.4.0
       zod:
         specifier: ^4.6.5
         version: 4.6.5
@@ -152,12 +164,24 @@ importers:
       '@types/node':
         specifier: ^26.6.4
         version: 26.6.4
+      '@types/supertest':
+        specifier: ^6.0.3
+        version: 6.0.3
+      pino-pretty:
+        specifier: ^13.2.0
+        version: 13.2.0
+      supertest:
+        specifier: ^7.1.4
+        version: 7.3.1(supports-color@7.2.0)
       tsx:
         specifier: ^4.23.15
         version: 4.23.15
       typescript:
         specifier: ^7.0.2
         version: 7.0.2
+      vitest:
+        specifier: ^3.2.4
+        version: 3.2.7(@types/node@26.6.4)(jiti@2.7.0)(lightningcss@1.32.0)(supports-color@7.2.0)(tsx@4.23.15)
 
   apps/user-panel:
     dependencies:

@@ -21,6 +21,7 @@ import { afterAll, describe, expect, it } from 'vitest';
 
 import app from '../../app.js';
 import { hashPassword } from '../../lib/auth/auth.js';
+import { inrToPaise } from '../../lib/money.js';
 
 import { loginAdmin } from '../admin/auth/admin-auth.service.js';
 import { reverseTransfer } from '../admin/transfer/admin-transfer.service.js';
@@ -109,7 +110,7 @@ const createDeposit = async (userId: string, amountInr: number) => {
         orderId: payment.orderId,
         paymentId: randomUUID(),
         status: 'SUCCESS',
-        amount: amountInr,
+        amount: Number(inrToPaise(amountInr)),
     });
 
     const [txn] = await db

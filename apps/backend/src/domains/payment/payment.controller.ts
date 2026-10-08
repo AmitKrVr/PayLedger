@@ -20,7 +20,8 @@ import type {
     PaymentIdParams,
 } from './payment.validator.js';
 
-const WEBHOOK_SIGNATURE_HEADER = 'x-webhook-signature';
+// Matches the Fake Payment Gateway's webhook client exactly.
+const WEBHOOK_SIGNATURE_HEADER = 'x-payment-gateway-signature';
 
 /**
  * Pure signature check, exported so it can be unit-tested directly

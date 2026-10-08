@@ -15,6 +15,13 @@
       "when": 1791369638034,
       "tag": "0001_sturdy_ghost_rider",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791438781828,
+      "tag": "0002_sloppy_agent_zero",
+      "breakpoints": true
     }
   ]
 }
