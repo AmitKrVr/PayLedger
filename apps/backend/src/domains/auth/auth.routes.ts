@@ -1,5 +1,6 @@
 import { Router } from 'express';
 
+import { requireUserAuth } from '../../middleware/auth.middleware.js';
 import {
     loginRateLimit,
     refreshRateLimit,
@@ -11,7 +12,7 @@ import {
     loginSchema,
     registerSchema,
 } from './auth.validator.js';
-import { loginController, logoutController, refreshController, registerController } from './auth.controller.js';
+import { loginController, logoutController, meController, refreshController, registerController } from './auth.controller.js';
 
 const router = Router();
 
@@ -36,5 +37,7 @@ router.post(
 );
 
 router.post('/logout', logoutController);
+
+router.get('/me', requireUserAuth, meController);
 
 export default router;

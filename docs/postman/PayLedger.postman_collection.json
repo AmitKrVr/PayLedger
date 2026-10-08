@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "b3e04771-419b-4f93-b6dc-d306a75f8221",
 		"name": "PayLedger API",
-		"description": "Postman collection for all currently implemented PayLedger backend APIs.\n\n### Base URL\n`http://localhost:5001/api/v1`\n\n### Authentication & Security Architecture\n- **Access Tokens**: Short-lived (15 minutes) stateless JWTs.\n- **Refresh Tokens**: Long-lived (30 days) stateful tokens with cryptographic SHA-256 hashes persisted in PostgreSQL `user_sessions`.\n- **Cookie Transport**: Authentication tokens are stored and transmitted exclusively via HTTP-only, Secure, SameSite cookies (`access_token` and `refresh_token`). Tokens are never returned in JSON response bodies.\n- **Rate Limiting**: Express middleware backed by Redis enforces sliding window IP rate limits across authentication endpoints.\n- **Account Lockout**: 5 consecutive failed login attempts trigger an automatic 15-minute account lockout.",
+		"description": "Comprehensive Postman collection for all completed PayLedger backend APIs.\n\n### Base URL\n`http://localhost:5001/api/v1`\n\n### Authentication Architecture\n- **User & Admin Separation**: Separate database tables (`users` vs `admins`), separate session tables (`user_sessions` vs `admin_sessions`), and distinct authorization guards.\n- **Cookie Handling**: Authentication tokens (`access_token` and `refresh_token`) are transmitted via HTTP-only, Secure, SameSite cookies. Tokens are **never** returned in the JSON response body.\n- **Access Tokens**: Short-lived (15 minutes) stateless JWTs.\n- **Refresh Tokens**: Long-lived (30 days) stateful tokens persisted in hashed form (SHA-256) in PostgreSQL with automatic rotation and replay attack detection on every `/refresh`.\n- **Idempotency**: All financial state-mutating endpoints (`/payments`, `/transfers`, `/withdrawals`) require an `Idempotency-Key` header with a valid UUID.\n- **Monetary Units**: API request and response amounts are formatted in INR (Rupees with decimals). Internal ledger and database calculations are stored as integer paise (`BIGINT`).",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"variable": [
@@ -19,8 +19,8 @@
 	],
 	"item": [
 		{
-			"name": "Authentication",
-			"description": "User authentication endpoints: registration, credential login, token rotation, and logout.",
+			"name": "User - Authentication",
+			"description": "User authentication endpoints: registration, login, profile inspection, token refresh, and logout.",
 			"item": [
 				{
 					"name": "Register User",
@@ -51,7 +51,7 @@
 								"register"
 							]
 						},
-						"description": "Registers a new user account, creates an initial wallet with 0 balance, establishes an authenticated session, and writes an audit log in a single atomic database transaction.\n\n### Requirements\n- **name**: String (2 to 100 characters).\n- **mobile**: Valid 10-digit Indian mobile number (`^[6-9]\\d{9}$`).\n- **email**: Optional string (valid email format, max 255 characters).\n- **password**: String (8 to 128 characters).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m expiry)\n- `refresh_token` (HTTP-only, 30d expiry)"
+						"description": "Registers a new user, creates their initial wallet with 0 balance, establishes a user session, and writes an audit log in a single atomic database transaction.\n\n### Validation Rules\n- **name**: String (2 to 100 characters).\n- **mobile**: Valid 10-digit Indian mobile number (`^[6-9]\\d{9}$`).\n- **email**: Optional string (valid email format, max 255 characters).\n- **password**: String (8 to 128 characters).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m)\n- `refresh_token` (HTTP-only, 30d)"
 					},
 					"response": [
 						{
@@ -104,7 +104,7 @@
 							"body": "{\n  \"success\": true,\n  \"code\": \"CREATED\",\n  \"message\": \"Account registered successfully\",\n  \"requestId\": \"c45d385f-a1e9-45fe-8058-6a9ea2803b2c\",\n  \"data\": {\n    \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n    \"name\": \"Amit Kumar\",\n    \"mobile\": \"9876543210\",\n    \"email\": \"amit@example.com\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-07T11:55:48.477Z\"\n  }\n}"
 						},
 						{
-							"name": "409 Conflict - Mobile Already Exists",
+							"name": "409 Conflict - Duplicate Mobile or Email",
 							"originalRequest": {
 								"method": "POST",
 								"header": [
@@ -143,47 +143,6 @@
 								}
 							],
 							"body": "{\n  \"success\": false,\n  \"code\": \"CONFLICT\",\n  \"message\": \"A user with this mobile number already exists\",\n  \"requestId\": \"de3a0346-11c3-4458-aba7-269e95a82356\"\n}"
-						},
-						{
-							"name": "422 Unprocessable Entity - Validation Error",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"name\": \"A\",\n  \"mobile\": \"12345\",\n  \"password\": \"short\"\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{baseUrl}}/auth/register",
-									"host": [
-										"{{baseUrl}}"
-									],
-									"path": [
-										"auth",
-										"register"
-									]
-								}
-							},
-							"status": "Unprocessable Entity",
-							"code": 422,
-							"_postman_previewlanguage": "json",
-							"header": [
-								{
-									"key": "Content-Type",
-									"value": "application/json; charset=utf-8"
-								}
-							],
-							"body": "{\n  \"success\": false,\n  \"code\": \"VALIDATION_ERROR\",\n  \"message\": \"Validation failed\",\n  \"requestId\": \"24fc3041-8f55-46aa-8367-9d7a5b3a9856\",\n  \"errors\": [\n    {\n      \"field\": \"name\",\n      \"message\": \"Name must be at least 2 characters\"\n    },\n    {\n      \"field\": \"mobile\",\n      \"message\": \"Please enter a valid Indian mobile number\"\n    },\n    {\n      \"field\": \"password\",\n      \"message\": \"Password must be at least 8 characters\"\n    }\n  ]\n}"
 						}
 					]
 				},
@@ -216,7 +175,7 @@
 								"login"
 							]
 						},
-						"description": "Authenticates an existing user using their registered mobile number and password verified with Argon2id.\n\n### Security & Policy Rules\n- **No User Enumeration**: Returns generic `INVALID_CREDENTIALS` for both non-existent users and wrong passwords.\n- **Account Lockout**: 5 failed login attempts will temporarily lock the account for 15 minutes (`locked_until`).\n- **Rate Limiting**: IP rate limited via Redis middleware (`RATE_LIMIT_LOGIN_MAX` requests per `RATE_LIMIT_LOGIN_WINDOW_SECONDS`).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m expiry)\n- `refresh_token` (HTTP-only, 30d expiry)"
+						"description": "Authenticates a user via Indian mobile number and Argon2id password verification.\n\n### Security & Protections\n- **Anti-Enumeration**: Returns identical `INVALID_CREDENTIALS` error for missing mobile or wrong password.\n- **Account Lockout**: 5 failed login attempts lock the account for 15 minutes (`locked_until`).\n- **Rate Limiting**: Enforced via Redis middleware (`auth:login` prefix).\n\n### Cookies Set\n- `access_token` (HTTP-only, 15m)\n- `refresh_token` (HTTP-only, 30d)"
 					},
 					"response": [
 						{
@@ -349,39 +308,45 @@
 								}
 							],
 							"body": "{\n  \"success\": false,\n  \"code\": \"ACCOUNT_LOCKED\",\n  \"message\": \"Your account is temporarily locked\",\n  \"requestId\": \"25da8bf5-9fac-4a98-82fa-f178927c226b\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Current User Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"auth",
+								"me"
+							]
 						},
+						"description": "Returns the authenticated user's profile.\n\n### Authentication\nRequires valid `access_token` HTTP-only cookie."
+					},
+					"response": [
 						{
-							"name": "429 Too Many Requests - Rate Limit Exceeded",
+							"name": "200 OK - Profile Found",
 							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"mobile\": \"9876543210\",\n  \"password\": \"Password123!\"\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
+								"method": "GET",
+								"header": [],
 								"url": {
-									"raw": "{{baseUrl}}/auth/login",
+									"raw": "{{baseUrl}}/auth/me",
 									"host": [
 										"{{baseUrl}}"
 									],
 									"path": [
 										"auth",
-										"login"
+										"me"
 									]
 								}
 							},
-							"status": "Too Many Requests",
-							"code": 429,
+							"status": "OK",
+							"code": 200,
 							"_postman_previewlanguage": "json",
 							"header": [
 								{
@@ -389,7 +354,34 @@
 									"value": "application/json; charset=utf-8"
 								}
 							],
-							"body": "{\n  \"success\": false,\n  \"code\": \"RATE_LIMIT_EXCEEDED\",\n  \"message\": \"Too many requests. Please try again later.\",\n  \"requestId\": \"5f4a35da-3cf4-42f5-b8a1-5c8e4d5e9fcb\"\n}"
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"e2d4f890-571b-4f91-88f5-30fae41ab5b1\",\n  \"data\": {\n    \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n    \"name\": \"Amit Kumar\",\n    \"mobile\": \"9876543210\",\n    \"email\": \"amit@example.com\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-07T11:55:48.477Z\"\n  }\n}"
+						},
+						{
+							"name": "401 Unauthorized - Unauthenticated",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/auth/me",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"auth",
+										"me"
+									]
+								}
+							},
+							"status": "Unauthorized",
+							"code": 401,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"AUTHENTICATION_ERROR\",\n  \"message\": \"Please sign in to continue\",\n  \"requestId\": \"a184ec01-6c3f-4272-911e-289dbbe55b68\"\n}"
 						}
 					]
 				},
@@ -408,11 +400,11 @@
 								"refresh"
 							]
 						},
-						"description": "Rotates authentication tokens using the presentation of the valid HTTP-only `refresh_token` cookie.\n\n### Mechanics\n- Reads `refresh_token` from request cookies.\n- Verifies JWT integrity and cryptographic SHA-256 hash match against active session in PostgreSQL.\n- **Replay Protection**: If a previously used refresh token hash is presented, the session is flagged as compromised and revoked immediately.\n- Upon validation, rotates the refresh token and issues a new access token, updating the cookies.\n\n### Cookies Sent\n- `refresh_token` (HTTP-only cookie)\n\n### Cookies Received\n- New `access_token`\n- New rotated `refresh_token`"
+						"description": "Rotates refresh and access tokens using the `refresh_token` HTTP-only cookie.\n\n### Security & Replay Detection\n- Validates token signature, expiration, and database match via unique `refreshTokenJti`.\n- Checks SHA-256 hash match against PostgreSQL session record.\n- **Replay Protection**: If a previously consumed refresh token is presented, the entire session is revoked immediately.\n\n### Cookies Set\n- New rotated `access_token` and `refresh_token`"
 					},
 					"response": [
 						{
-							"name": "200 OK - Token Refreshed Successfully",
+							"name": "200 OK - Token Rotated",
 							"originalRequest": {
 								"method": "POST",
 								"header": [],
@@ -447,7 +439,7 @@
 							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Token refreshed successfully\",\n  \"requestId\": \"a7dd3a19-1a7d-4ba2-8dbd-fc7f7ece0fc5\",\n  \"data\": null\n}"
 						},
 						{
-							"name": "401 Unauthorized - Missing / Invalid Refresh Token",
+							"name": "401 Unauthorized - Invalid Refresh Token",
 							"originalRequest": {
 								"method": "POST",
 								"header": [],
@@ -490,7 +482,7 @@
 								"logout"
 							]
 						},
-						"description": "Logs out the current user session idempotently.\n\n### Mechanics\n- Reads `refresh_token` or `access_token` from cookies to identify and revoke the session in PostgreSQL `user_sessions`.\n- Clears `access_token` and `refresh_token` cookies on the client response.\n- Idempotent: Does not fail even if cookies are missing or the session has already expired.\n\n### Cookies Cleared\n- `access_token`\n- `refresh_token`"
+						"description": "Logs out the user session idempotently. Revokes the session in PostgreSQL and clears authentication cookies."
 					},
 					"response": [
 						{
@@ -533,6 +525,1401 @@
 			]
 		},
 		{
+			"name": "User - Wallet",
+			"description": "Wallet operations: view current balance, held amount, and available spendable funds.",
+			"item": [
+				{
+					"name": "Get Wallet Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/wallet",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"wallet"
+							]
+						},
+						"description": "Fetches the current user's wallet summary.\n\n### Balance Mechanics\n- **balance**: Total ledger balance in INR.\n- **held**: Funds reserved for pending withdrawals in INR.\n- **available**: Spendable balance (`balance - held`) in INR.\n\n### Authentication\nRequires `access_token` cookie."
+					},
+					"response": [
+						{
+							"name": "200 OK - Wallet Details",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/wallet",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"wallet"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"f38b21c9-6310-4bf6-98ec-75841029cde1\",\n  \"data\": {\n    \"id\": \"1e23d82f-1c61-4fdf-97f9-d200879175dd\",\n    \"balance\": 1500.50,\n    \"held\": 200.00,\n    \"available\": 1300.50,\n    \"status\": \"ACTIVE\"\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User - Payments (Deposits)",
+			"description": "Money deposit orders via integration with the Fake Payment Gateway.",
+			"item": [
+				{
+					"name": "Create Payment (Deposit)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "{{$guid}}",
+								"description": "Required unique UUID to guarantee idempotent order creation"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 500\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/payments",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"payments"
+							]
+						},
+						"description": "Initiates a deposit payment order with the Fake Payment Gateway.\n\n### Validation Rules\n- **amount**: Positive number in INR.\n- Minimum deposit: ₹100 (`PAYMENT_MIN_DEPOSIT_INR`).\n- Maximum deposit: ₹25,000 (`PAYMENT_MAX_DEPOSIT_INR`).\n- **Idempotency-Key**: Required UUID header."
+					},
+					"response": [
+						{
+							"name": "201 Created - Deposit Initiated",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Idempotency-Key",
+										"value": "123e4567-e89b-12d3-a456-426614174000"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"amount\": 500\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/payments",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"payments"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"CREATED\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"a54e9081-3091-4e4b-986b-ff1104e1208a\",\n  \"data\": {\n    \"id\": \"e4b85718-d9a2-4663-874b-55418b760205\",\n    \"orderId\": \"ORD_7BGX29K\",\n    \"amount\": 500,\n    \"status\": \"PENDING\",\n    \"expiresAt\": \"2026-10-08T08:15:00.000Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Payment by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/payments/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"payments",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "e4b85718-d9a2-4663-874b-55418b760205",
+									"description": "Payment UUID"
+								}
+							]
+						},
+						"description": "Fetches status and details of a specific payment order for the authenticated user."
+					},
+					"response": [
+						{
+							"name": "200 OK - Payment Details",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/payments/e4b85718-d9a2-4663-874b-55418b760205",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"payments",
+										"e4b85718-d9a2-4663-874b-55418b760205"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"b138e920-1a7f-4f24-9b16-98dc41e62688\",\n  \"data\": {\n    \"id\": \"e4b85718-d9a2-4663-874b-55418b760205\",\n    \"orderId\": \"ORD_7BGX29K\",\n    \"amount\": 500,\n    \"status\": \"SUCCESS\",\n    \"expiresAt\": \"2026-10-08T08:15:00.000Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Payment Gateway Webhook",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "x-payment-gateway-signature",
+								"value": "<hmac-sha256-signature-hex>",
+								"description": "Hex HMAC-SHA256 signature computed over the raw request payload using PAYMENT_WEBHOOK_SECRET"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"orderId\": \"ORD_7BGX29K\",\n  \"paymentId\": \"PAY_GW_88291\",\n  \"status\": \"SUCCESS\",\n  \"amount\": 50000,\n  \"failureReason\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/payments/webhook",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"payments",
+								"webhook"
+							]
+						},
+						"description": "Webhook listener receiving payment completion callbacks from the Fake Payment Gateway.\n\n### Security & Contract\n- Validated via `x-payment-gateway-signature` header matching HMAC-SHA256 of raw request body.\n- **amount**: Expressed in **paise** (e.g. ₹500 = 50,000 paise).\n- Atomically updates payment state, credits user wallet, creates ledger record, and commits double-entry balance."
+					},
+					"response": [
+						{
+							"name": "200 OK - Webhook Processed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "x-payment-gateway-signature",
+										"value": "c83f9821ba9..."
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"orderId\": \"ORD_7BGX29K\",\n  \"paymentId\": \"PAY_GW_88291\",\n  \"status\": \"SUCCESS\",\n  \"amount\": 50000\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/payments/webhook",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"payments",
+										"webhook"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"cf5e8210-9118-4221-87ab-ee19842f11a4\",\n  \"data\": null\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User - Transfers",
+			"description": "Peer-to-peer wallet transfers between registered PayLedger users.",
+			"item": [
+				{
+					"name": "Lookup Recipient by Mobile",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mobile\": \"9876543211\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/transfers/recipient",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"transfers",
+								"recipient"
+							]
+						},
+						"description": "Looks up a transfer recipient by Indian mobile number to verify user identity before sending money.\n\n### Rules\n- Users cannot transfer money to themselves."
+					},
+					"response": [
+						{
+							"name": "200 OK - Recipient Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9876543211\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/transfers/recipient",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transfers",
+										"recipient"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"848e0291-a1cf-417d-94bb-10928374a5e6\",\n  \"data\": {\n    \"userId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n    \"name\": \"Priya Sharma\"\n  }\n}"
+						},
+						{
+							"name": "404 Not Found - Recipient Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"mobile\": \"9111111111\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/transfers/recipient",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transfers",
+										"recipient"
+									]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"RECIPIENT_NOT_FOUND\",\n  \"message\": \"Recipient not found with this mobile number\",\n  \"requestId\": \"31049281-9b10-48e1-a084-749320816a7e\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Create Transfer",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "{{$guid}}",
+								"description": "Required unique UUID header"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"recipientUserId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n  \"amount\": 250\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/transfers",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"transfers"
+							]
+						},
+						"description": "Transfers funds directly to another user's wallet with zero-sum immutable ledger tracking.\n\n### Business Rules\n- **Maximum single transfer**: ₹25,000 (`TRANSFER_MAX_AMOUNT_INR`).\n- **Daily rolling limit**: ₹50,000 (`TRANSFER_DAILY_LIMIT_INR`).\n- **System fee**: 1% (min ₹1, max ₹20). Fee is credited to the PayLedger system wallet.\n- **Deadlock prevention**: Wallets are ordered by UUID before locking during transaction execution."
+					},
+					"response": [
+						{
+							"name": "201 Created - Transfer Completed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Idempotency-Key",
+										"value": "83719012-3847-4f91-8847-192837465012"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"recipientUserId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n  \"amount\": 250\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/transfers",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transfers"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"CREATED\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"a1892837-2938-4b71-9844-384918274619\",\n  \"data\": {\n    \"id\": \"74819283-9182-4c81-8172-384719283746\",\n    \"referenceId\": \"TRF_8XKJ29P\",\n    \"recipient\": {\n      \"userId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n      \"name\": \"Priya Sharma\"\n    },\n    \"amount\": 250,\n    \"fee\": 2.50,\n    \"total\": 252.50,\n    \"status\": \"COMPLETED\",\n    \"createdAt\": \"2026-10-08T08:20:00.000Z\"\n  }\n}"
+						},
+						{
+							"name": "422 Unprocessable Entity - Insufficient Funds",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Idempotency-Key",
+										"value": "83719012-3847-4f91-8847-192837465012"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"recipientUserId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n  \"amount\": 25000\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/transfers",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transfers"
+									]
+								}
+							},
+							"status": "Unprocessable Entity",
+							"code": 422,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"INSUFFICIENT_FUNDS\",\n  \"message\": \"Insufficient funds to complete this transfer\",\n  \"requestId\": \"91827364-1928-4e82-9482-102938475619\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User - Withdrawals",
+			"description": "Withdraw funds from wallet into external bank account.",
+			"item": [
+				{
+					"name": "Create Withdrawal Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Idempotency-Key",
+								"value": "{{$guid}}",
+								"description": "Required unique UUID header"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"amount\": 500\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/withdrawals",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"withdrawals"
+							]
+						},
+						"description": "Submits a withdrawal request. Funds are immediately reserved/held in the wallet (`held_paise`) pending admin approval.\n\n### Limits\n- Minimum withdrawal: ₹100 (`WITHDRAWAL_MIN_AMOUNT_INR`).\n- Maximum withdrawal: ₹25,000 (`WITHDRAWAL_MAX_AMOUNT_INR`).\n- Requires sufficient available (`balance - held`) funds."
+					},
+					"response": [
+						{
+							"name": "201 Created - Withdrawal Requested",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Idempotency-Key",
+										"value": "48192837-4718-4a92-8172-918273645102"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"amount\": 500\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/withdrawals",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"withdrawals"
+									]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"CREATED\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"59182736-1928-4f81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"91827364-1928-4e82-8172-918273645102\",\n    \"amount\": 500,\n    \"status\": \"PENDING\",\n    \"requestedAt\": \"2026-10-08T08:25:00.000Z\"\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "User - Transactions",
+			"description": "Read-only financial transaction history and single transaction inspection.",
+			"item": [
+				{
+					"name": "List Transactions",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/transactions?page=1&limit=20",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"transactions"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (defaults to 1)"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page limit (defaults to 20, max 100)"
+								},
+								{
+									"key": "type",
+									"value": "TRANSFER",
+									"disabled": true,
+									"description": "Filter by type: DEPOSIT, TRANSFER, TRANSFER_REVERSAL, WITHDRAWAL"
+								},
+								{
+									"key": "status",
+									"value": "COMPLETED",
+									"disabled": true,
+									"description": "Filter by status: PENDING, COMPLETED, FAILED, REVERSED"
+								},
+								{
+									"key": "from",
+									"value": "2026-10-01T00:00:00.000Z",
+									"disabled": true,
+									"description": "Filter start ISO date"
+								},
+								{
+									"key": "to",
+									"value": "2026-10-31T23:59:59.999Z",
+									"disabled": true,
+									"description": "Filter end ISO date"
+								}
+							]
+						},
+						"description": "Returns a paginated list of financial transactions for the authenticated user, resolving counterparty names for transfers with batch lookups."
+					},
+					"response": [
+						{
+							"name": "200 OK - Transactions List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/transactions?page=1&limit=20",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transactions"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Records fetched successfully\",\n  \"requestId\": \"71829304-1928-4e81-9182-102938475619\",\n  \"data\": [\n    {\n      \"id\": \"18293041-9182-4c81-8172-102938475619\",\n      \"referenceId\": \"TRF_8XKJ29P\",\n      \"type\": \"TRANSFER\",\n      \"status\": \"COMPLETED\",\n      \"amount\": 250,\n      \"direction\": \"DEBIT\",\n      \"description\": \"Transfer to Priya Sharma\",\n      \"counterparty\": {\n        \"userId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n        \"name\": \"Priya Sharma\"\n      },\n      \"createdAt\": \"2026-10-08T08:20:00.000Z\",\n      \"completedAt\": \"2026-10-08T08:20:01.000Z\"\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 20,\n    \"totalItems\": 1,\n    \"totalPages\": 1,\n    \"hasNextPage\": false,\n    \"hasPreviousPage\": false\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Transaction by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/transactions/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"transactions",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "18293041-9182-4c81-8172-102938475619",
+									"description": "Transaction UUID"
+								}
+							]
+						},
+						"description": "Returns full details of a specific financial transaction belonging to the authenticated user."
+					},
+					"response": [
+						{
+							"name": "200 OK - Transaction Found",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/transactions/18293041-9182-4c81-8172-102938475619",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"transactions",
+										"18293041-9182-4c81-8172-102938475619"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"81920394-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"18293041-9182-4c81-8172-102938475619\",\n    \"referenceId\": \"TRF_8XKJ29P\",\n    \"type\": \"TRANSFER\",\n    \"status\": \"COMPLETED\",\n    \"amount\": 250,\n    \"direction\": \"DEBIT\",\n    \"description\": \"Transfer to Priya Sharma\",\n    \"counterparty\": {\n      \"userId\": \"b928174a-2f41-489e-b154-1823901a88bb\",\n      \"name\": \"Priya Sharma\"\n    },\n    \"createdAt\": \"2026-10-08T08:20:00.000Z\",\n    \"completedAt\": \"2026-10-08T08:20:01.000Z\"\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Admin - Authentication",
+			"description": "Admin identity and session management endpoints.",
+			"item": [
+				{
+					"name": "Admin Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@payledger.internal\",\n  \"password\": \"AdminSecurePassword123!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/auth/login",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Authenticates an administrator using email and password.\n\n### Cookies Set\n- `access_token` (HTTP-only admin JWT with `role` claim)\n- `refresh_token` (HTTP-only admin refresh token)"
+					},
+					"response": [
+						{
+							"name": "200 OK - Admin Login Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"admin@payledger.internal\",\n  \"password\": \"AdminSecurePassword123!\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/admin/auth/login",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"auth",
+										"login"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Login successful\",\n  \"requestId\": \"a1829384-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"f8192837-1928-4c81-8172-102938475619\",\n    \"name\": \"System Admin\",\n    \"email\": \"admin@payledger.internal\",\n    \"role\": \"SUPER_ADMIN\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-01T00:00:00.000Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Current Admin Profile",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/auth/me",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"me"
+							]
+						},
+						"description": "Returns the authenticated administrator's profile and active role.\n\n### Authorization\nRequires `requireAdminAuth` guard."
+					},
+					"response": [
+						{
+							"name": "200 OK - Admin Profile",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/auth/me",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"auth",
+										"me"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"19283746-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"f8192837-1928-4c81-8172-102938475619\",\n    \"name\": \"System Admin\",\n    \"email\": \"admin@payledger.internal\",\n    \"role\": \"SUPER_ADMIN\",\n    \"status\": \"ACTIVE\",\n    \"createdAt\": \"2026-10-01T00:00:00.000Z\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Admin Refresh Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/auth/refresh",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Rotates admin authentication tokens using the admin `refresh_token` cookie."
+					},
+					"response": [
+						{
+							"name": "200 OK - Admin Token Rotated",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/auth/refresh",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"auth",
+										"refresh"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=eyJhbGci...; Path=/; HttpOnly; SameSite=Lax"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Token refreshed successfully\",\n  \"requestId\": \"81920394-1928-4e81-8172-102938475619\",\n  \"data\": null\n}"
+						}
+					]
+				},
+				{
+					"name": "Admin Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/auth/logout",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Logs out the current admin session idempotently, revoking the session in `admin_sessions` and clearing cookies."
+					},
+					"response": [
+						{
+							"name": "200 OK - Admin Logout Successful",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/auth/logout",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"auth",
+										"logout"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "access_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly"
+								},
+								{
+									"key": "Set-Cookie",
+									"value": "refresh_token=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Logout successful\",\n  \"requestId\": \"29182736-1928-4e81-8172-102938475619\",\n  \"data\": null\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Admin - Withdrawals",
+			"description": "Admin review, approval, and rejection of user withdrawal requests.",
+			"item": [
+				{
+					"name": "List All Withdrawals",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/withdrawals?page=1&limit=20&status=PENDING",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"withdrawals"
+							],
+							"query": [
+								{
+									"key": "page",
+									"value": "1",
+									"description": "Page number (defaults to 1)"
+								},
+								{
+									"key": "limit",
+									"value": "20",
+									"description": "Page limit (defaults to 20, max 100)"
+								},
+								{
+									"key": "status",
+									"value": "PENDING",
+									"description": "Filter by status: PENDING, APPROVED, REJECTED"
+								}
+							]
+						},
+						"description": "Lists withdrawal requests across all users with pagination and status filters."
+					},
+					"response": [
+						{
+							"name": "200 OK - Withdrawals List",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/withdrawals?page=1&limit=20&status=PENDING",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"withdrawals"
+									],
+									"query": [
+										{
+											"key": "page",
+											"value": "1"
+										},
+										{
+											"key": "limit",
+											"value": "20"
+										},
+										{
+											"key": "status",
+											"value": "PENDING"
+										}
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Records fetched successfully\",\n  \"requestId\": \"19283746-1928-4e81-8172-102938475619\",\n  \"data\": [\n    {\n      \"id\": \"91827364-1928-4e82-8172-918273645102\",\n      \"user\": {\n        \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n        \"name\": \"Amit Kumar\",\n        \"mobile\": \"9876543210\"\n      },\n      \"amount\": 500,\n      \"status\": \"PENDING\",\n      \"requestedAt\": \"2026-10-08T08:25:00.000Z\",\n      \"processedAt\": null\n    }\n  ],\n  \"meta\": {\n    \"page\": 1,\n    \"limit\": 20,\n    \"totalItems\": 1,\n    \"totalPages\": 1,\n    \"hasNextPage\": false,\n    \"hasPreviousPage\": false\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get Withdrawal by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/withdrawals/:id",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"withdrawals",
+								":id"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "91827364-1928-4e82-8172-918273645102",
+									"description": "Withdrawal UUID"
+								}
+							]
+						},
+						"description": "Fetches detail of a single withdrawal including user details and rejection reason if applicable."
+					},
+					"response": [
+						{
+							"name": "200 OK - Withdrawal Detail",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/withdrawals/91827364-1928-4e82-8172-918273645102",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"withdrawals",
+										"91827364-1928-4e82-8172-918273645102"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"81920394-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"91827364-1928-4e82-8172-918273645102\",\n    \"user\": {\n      \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n      \"name\": \"Amit Kumar\",\n      \"mobile\": \"9876543210\"\n    },\n    \"amount\": 500,\n    \"status\": \"PENDING\",\n    \"requestedAt\": \"2026-10-08T08:25:00.000Z\",\n    \"processedAt\": null,\n    \"rejectionReason\": null,\n    \"processedByAdminId\": null\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Approve Withdrawal",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/withdrawals/:id/approve",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"withdrawals",
+								":id",
+								"approve"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "91827364-1928-4e82-8172-918273645102",
+									"description": "Withdrawal UUID"
+								}
+							]
+						},
+						"description": "Approves a pending withdrawal request.\n\n### Financial Mechanics\n- Releases the hold and permanently debits the user's wallet.\n- Writes a double-entry `WITHDRAWAL` transaction and immutable ledger entry.\n- Updates withdrawal status to `APPROVED` and records audit entry."
+					},
+					"response": [
+						{
+							"name": "200 OK - Approved",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/withdrawals/91827364-1928-4e82-8172-918273645102/approve",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"withdrawals",
+										"91827364-1928-4e82-8172-918273645102",
+										"approve"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"19283746-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"91827364-1928-4e82-8172-918273645102\",\n    \"user\": {\n      \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n      \"name\": \"Amit Kumar\",\n      \"mobile\": \"9876543210\"\n    },\n    \"amount\": 500,\n    \"status\": \"APPROVED\",\n    \"requestedAt\": \"2026-10-08T08:25:00.000Z\",\n    \"processedAt\": \"2026-10-08T08:30:00.000Z\",\n    \"rejectionReason\": null,\n    \"processedByAdminId\": \"f8192837-1928-4c81-8172-102938475619\"\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Reject Withdrawal",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"reason\": \"Invalid bank account number provided\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{baseUrl}}/admin/withdrawals/:id/reject",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"withdrawals",
+								":id",
+								"reject"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "91827364-1928-4e82-8172-918273645102",
+									"description": "Withdrawal UUID"
+								}
+							]
+						},
+						"description": "Rejects a pending withdrawal request.\n\n### Financial Mechanics\n- Releases the hold (`held_paise`) returning the reserved funds to the user's available balance.\n- Updates withdrawal status to `REJECTED` with the supplied rejection reason (3 to 500 chars)."
+					},
+					"response": [
+						{
+							"name": "200 OK - Rejected",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"reason\": \"Invalid bank account number provided\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{baseUrl}}/admin/withdrawals/91827364-1928-4e82-8172-918273645102/reject",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"withdrawals",
+										"91827364-1928-4e82-8172-918273645102",
+										"reject"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"19283746-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"id\": \"91827364-1928-4e82-8172-918273645102\",\n    \"user\": {\n      \"id\": \"a8f91ee4-ba31-41a0-8db2-fb0e3f371b69\",\n      \"name\": \"Amit Kumar\",\n      \"mobile\": \"9876543210\"\n    },\n    \"amount\": 500,\n    \"status\": \"REJECTED\",\n    \"requestedAt\": \"2026-10-08T08:25:00.000Z\",\n    \"processedAt\": \"2026-10-08T08:31:00.000Z\",\n    \"rejectionReason\": \"Invalid bank account number provided\",\n    \"processedByAdminId\": \"f8192837-1928-4c81-8172-102938475619\"\n  }\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "Admin - Transfers",
+			"description": "Administrative reversal of completed peer-to-peer transfers.",
+			"item": [
+				{
+					"name": "Reverse Transfer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/admin/transfers/:id/reverse",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"admin",
+								"transfers",
+								":id",
+								"reverse"
+							],
+							"variable": [
+								{
+									"key": "id",
+									"value": "74819283-9182-4c81-8172-384719283746",
+									"description": "Transfer UUID"
+								}
+							]
+						},
+						"description": "Reverses a previously COMPLETED transfer.\n\n### Financial Consistency Rules\n- Atomically debits the recipient wallet and credits the original sender wallet.\n- The system transfer fee is reversed and deducted from the system wallet.\n- Creates immutable `TRANSFER_REVERSAL` transaction with snapshot ledger balances.\n- Deadlock-free locking: Wallets are locked in ascending UUID order."
+					},
+					"response": [
+						{
+							"name": "200 OK - Transfer Reversed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/transfers/74819283-9182-4c81-8172-384719283746/reverse",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"transfers",
+										"74819283-9182-4c81-8172-384719283746",
+										"reverse"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": true,\n  \"code\": \"SUCCESS\",\n  \"message\": \"Operation successful\",\n  \"requestId\": \"91827364-1928-4e81-8172-102938475619\",\n  \"data\": {\n    \"transferId\": \"74819283-9182-4c81-8172-384719283746\",\n    \"reversalTransactionId\": \"48192837-1928-4c81-8172-102938475619\",\n    \"referenceId\": \"REV_9YLM41Q\",\n    \"status\": \"REVERSED\",\n    \"processedAt\": \"2026-10-08T08:35:00.000Z\"\n  }\n}"
+						},
+						{
+							"name": "409 Conflict - Already Reversed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/admin/transfers/74819283-9182-4c81-8172-384719283746/reverse",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"admin",
+										"transfers",
+										"74819283-9182-4c81-8172-384719283746",
+										"reverse"
+									]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json; charset=utf-8"
+								}
+							],
+							"body": "{\n  \"success\": false,\n  \"code\": \"CONFLICT\",\n  \"message\": \"This transfer has already been reversed\",\n  \"requestId\": \"10293847-1928-4e81-8172-102938475619\"\n}"
+						}
+					]
+				}
+			]
+		},
+		{
 			"name": "System",
 			"description": "System health and service readiness endpoints.",
 			"item": [
@@ -550,7 +1937,7 @@
 								"health"
 							]
 						},
-						"description": "Health check probe endpoint to verify that the backend API server is running."
+						"description": "Health probe endpoint to verify that the backend API server is up and accepting connections."
 					},
 					"response": [
 						{

@@ -636,3 +636,16 @@ export const logout = async (
         });
     }
 };
+
+export const getProfile = async (userId: string): Promise<AuthUser> => {
+    const user = await findUserById(userId);
+
+    if (!user) {
+        throw new AuthenticationError(
+            ERROR_MESSAGES.UNAUTHORIZED,
+            ERROR_CODES.UNAUTHORIZED,
+        );
+    }
+
+    return sanitizeUser(user);
+};

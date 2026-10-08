@@ -16,6 +16,7 @@ import {
 import { sendSuccess } from '../../lib/http.js';
 
 import {
+    getProfile,
     login,
     logout,
     refresh,
@@ -156,6 +157,22 @@ export const logoutController: RequestHandler = async (
         });
     } catch (error) {
         clearAuthCookies(res);
+        next(error);
+    }
+};
+
+export const meController: RequestHandler = async (
+    req,
+    res,
+    next,
+) => {
+    try {
+        const user = await getProfile(req.user!.userId);
+
+        return sendSuccess(res, {
+            data: user,
+        });
+    } catch (error) {
         next(error);
     }
 };

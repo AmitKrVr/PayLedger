@@ -1,6 +1,7 @@
 import { Router } from 'express';
 
 import authRoutes from '../../domains/auth/auth.routes.js';
+import configRoutes from '../../domains/config/config.routes.js';
 import paymentRoutes from '../../domains/payment/payment.routes.js';
 import transactionRoutes from '../../domains/transaction/transaction.routes.js';
 import transferRoutes from '../../domains/transfer/transfer.routes.js';
@@ -12,6 +13,7 @@ import adminRouter from './admin/index.js';
 const router = Router();
 
 router.use('/auth', authRoutes);
+router.use('/config', configRoutes);
 router.use('/wallet', walletRoutes);
 router.use('/payments', paymentRoutes);
 router.use('/transfers', transferRoutes);

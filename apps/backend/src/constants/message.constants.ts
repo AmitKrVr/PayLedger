@@ -21,6 +21,7 @@ export const ERROR_MESSAGES = {
     INTERNAL_SERVER_ERROR: 'Internal server error',
 
     INVALID_CREDENTIALS: 'Invalid mobile number or password',
+    INVALID_CREDENTIALS_ADMIN: 'Invalid email or password',
     ACCOUNT_BLOCKED: 'Your account is blocked',
     ACCOUNT_LOCKED: 'Your account is temporarily locked',
     INVALID_TOKEN: 'Invalid or expired access token',
