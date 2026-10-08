@@ -14,10 +14,12 @@ import {
     createPayment,
     getPayment,
     processPaymentWebhook,
+    simulatePayment,
 } from './payment.service.js';
 import type {
     CreatePaymentInput,
     PaymentIdParams,
+    SimulatePaymentInput,
 } from './payment.validator.js';
 
 // Matches the Fake Payment Gateway's webhook client exactly.
@@ -109,6 +111,25 @@ export const getPaymentController: RequestHandler = async (
         const { id } = req.validatedParams as PaymentIdParams;
 
         const payment = await getPayment(id, req.user!.userId);
+
+        return sendSuccess(res, {
+            data: payment,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const simulatePaymentController: RequestHandler = async (
+    req,
+    res,
+    next,
+) => {
+    try {
+        const { id } = req.validatedParams as PaymentIdParams;
+        const body = req.body as SimulatePaymentInput;
+
+        const payment = await simulatePayment(id, req.user!.userId, body);
 
         return sendSuccess(res, {
             data: payment,

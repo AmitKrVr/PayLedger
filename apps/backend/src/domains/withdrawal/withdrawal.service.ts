@@ -15,8 +15,11 @@ import {
 } from '../wallet/wallet.repository.js';
 
 import {
+    countWithdrawalsForUser,
     createWithdrawal as createWithdrawalRecord,
+    findWithdrawalByIdForUser,
     findWithdrawalByWalletAndIdempotencyKey,
+    findWithdrawalsForUser,
 } from './withdrawal.repository.js';
 import {
     idempotencyKeyHeaderSchema,
@@ -45,6 +48,69 @@ const toWithdrawalResponse = (
     status: withdrawal.status,
     requestedAt: withdrawal.requestedAt,
 });
+
+type WithdrawalHistoryRow = {
+    id: string;
+    referenceId: string | null;
+    amountPaise: bigint;
+    status: WithdrawalStatus;
+    createdAt: Date;
+    updatedAt: Date;
+    processedAt: Date | null;
+    rejectionReason: string | null;
+};
+
+type WithdrawalHistoryItem = {
+    id: string;
+    reference: string | null;
+    amount: number;
+    status: WithdrawalStatus;
+    createdAt: Date;
+    updatedAt: Date;
+    processedAt: Date | null;
+    rejectionReason: string | null;
+};
+
+const toWithdrawalHistoryItem = (
+    row: WithdrawalHistoryRow,
+): WithdrawalHistoryItem => ({
+    id: row.id,
+    reference: row.referenceId,
+    amount: paiseToInr(row.amountPaise),
+    status: row.status,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    processedAt: row.processedAt,
+    rejectionReason: row.rejectionReason,
+});
+
+export const listWithdrawals = async (
+    userId: string,
+    filters: { status?: WithdrawalStatus; page: number; limit: number },
+): Promise<{ items: WithdrawalHistoryItem[]; totalItems: number }> => {
+    const [rows, totalItems] = await Promise.all([
+        findWithdrawalsForUser(userId, filters),
+        countWithdrawalsForUser(userId, { status: filters.status }),
+    ]);
+
+    return {
+        items: rows.map(toWithdrawalHistoryItem),
+        totalItems,
+    };
+};
+
+export const getWithdrawal = async (
+    id: string,
+    userId: string,
+): Promise<WithdrawalHistoryItem> => {
+    const row = await findWithdrawalByIdForUser(id, userId);
+
+    if (!row) {
+        throw new NotFoundError('Withdrawal not found', ERROR_CODES.NOT_FOUND);
+    }
+
+    return toWithdrawalHistoryItem(row);
+};
 
 const isUniqueViolation = (error: unknown): boolean => {
     const code =

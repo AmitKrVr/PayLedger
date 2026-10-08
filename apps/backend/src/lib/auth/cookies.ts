@@ -48,6 +48,7 @@ export const setAuthCookies = (
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
+        domain: env.COOKIE_DOMAIN,
         path: '/',
         maxAge: ACCESS_TOKEN_MAX_AGE_MS,
     });
@@ -56,6 +57,7 @@ export const setAuthCookies = (
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
+        domain: env.COOKIE_DOMAIN,
         path: '/',
         maxAge: REFRESH_TOKEN_MAX_AGE_MS,
     });
@@ -68,6 +70,7 @@ export const clearAuthCookies = (
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
+        domain: env.COOKIE_DOMAIN,
         path: '/',
     });
 
@@ -75,6 +78,7 @@ export const clearAuthCookies = (
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
+        domain: env.COOKIE_DOMAIN,
         path: '/',
     });
 };

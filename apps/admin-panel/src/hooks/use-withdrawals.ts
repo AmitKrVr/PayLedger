@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import {
   approveWithdrawal,
+  getWithdrawal,
   type ListWithdrawalsParams,
   listWithdrawals,
   rejectWithdrawal,
@@ -17,13 +18,22 @@ export function useWithdrawalsQuery(params: ListWithdrawalsParams) {
   })
 }
 
+export function useWithdrawalQuery(id: string | null) {
+  return useQuery({
+    queryKey: ["withdrawals", "detail", id],
+    queryFn: () => getWithdrawal(id!),
+    enabled: id !== null,
+  })
+}
+
 export function useApproveWithdrawal() {
   const queryClient = useQueryClient()
 
   return useMutation({
     mutationFn: (id: string) => approveWithdrawal(id),
-    onSuccess: () => {
+    onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "list"] })
+      queryClient.invalidateQueries({ queryKey: ["withdrawals", "detail", id] })
     },
   })
 }
@@ -34,8 +44,9 @@ export function useRejectWithdrawal() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       rejectWithdrawal(id, reason),
-    onSuccess: () => {
+    onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "list"] })
+      queryClient.invalidateQueries({ queryKey: ["withdrawals", "detail", id] })
     },
   })
 }

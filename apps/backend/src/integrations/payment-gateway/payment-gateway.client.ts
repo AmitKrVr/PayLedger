@@ -24,6 +24,18 @@ const gatewayOrderResponseSchema = z.object({
 
 export type GatewayOrder = z.infer<typeof gatewayOrderResponseSchema>['data'];
 
+const gatewaySimulateResponseSchema = z.object({
+    success: z.boolean(),
+    data: z.object({
+        id: z.string().min(1),
+        orderId: z.string().min(1),
+        paymentId: z.string().min(1),
+        amount: z.number(),
+        currency: z.string(),
+        status: z.enum(['CREATED', 'SUCCESS', 'FAILED']),
+    }),
+});
+
 export type CreateGatewayPaymentInput = {
     orderId: string;
     amountPaise: bigint;
@@ -114,4 +126,71 @@ export const createGatewayPayment = async (
     }
 
     return order;
+};
+
+export type SimulateOutcome = 'SUCCESS' | 'FAILED';
+
+/**
+ * Drives the Fake Payment Gateway's own test-checkout action for an
+ * already-created order -- the gateway's `/success` or `/failure`
+ * endpoint, called server-to-server exactly like `createGatewayPayment`
+ * above. This never sets PayLedger's payment status itself: the gateway
+ * responds only after it has sent (and this backend has processed) the
+ * real signed webhook, so the terminal SUCCESS/FAILED state always comes
+ * through `processPaymentWebhook`, never through this call directly.
+ */
+export const simulateGatewayPayment = async (
+    gatewayPaymentId: string,
+    outcome: SimulateOutcome,
+    reason?: string,
+    baseUrl: string = env.PAYMENT_GATEWAY_BASE_URL,
+): Promise<void> => {
+    const path =
+        outcome === 'SUCCESS'
+            ? `${CREATE_PAYMENT_PATH}/${gatewayPaymentId}/success`
+            : `${CREATE_PAYMENT_PATH}/${gatewayPaymentId}/failure`;
+
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+    let response: Response;
+
+    try {
+        response = await fetch(`${baseUrl}${path}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:
+                outcome === 'FAILED' && reason
+                    ? JSON.stringify({ reason })
+                    : JSON.stringify({}),
+            signal: controller.signal,
+        });
+    } catch (error) {
+        logger.error(
+            { error, gatewayPaymentId, outcome },
+            'Failed to reach the Fake Payment Gateway to simulate payment completion',
+        );
+
+        return fail(gatewayPaymentId, 'unreachable');
+    } finally {
+        clearTimeout(timeout);
+    }
+
+    if (!response.ok) {
+        return fail(gatewayPaymentId, `http_${response.status}`);
+    }
+
+    let json: unknown;
+
+    try {
+        json = await response.json();
+    } catch {
+        return fail(gatewayPaymentId, 'unparsable_response');
+    }
+
+    const parsed = gatewaySimulateResponseSchema.safeParse(json);
+
+    if (!parsed.success) {
+        return fail(gatewayPaymentId, 'malformed_response');
+    }
 };

@@ -74,6 +74,13 @@ export const wallets = pgTable(
             .on(table.userId)
             .where(sql`${table.walletType} = 'USER'`),
 
+        // At most one SYSTEM wallet can ever exist: all SYSTEM rows carry
+        // the same indexed value, so a second INSERT collides on this
+        // index exactly like a duplicate key would.
+        uniqueIndex('wallets_system_singleton_idx')
+            .on(table.walletType)
+            .where(sql`${table.walletType} = 'SYSTEM'`),
+
         check(
             'wallets_user_system_type_check',
             sql`

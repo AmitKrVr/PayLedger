@@ -10,7 +10,10 @@ import {
     NotFoundError,
 } from '../../middleware/error.middleware.js';
 
-import { createGatewayPayment } from '../../integrations/payment-gateway/payment-gateway.client.js';
+import {
+    createGatewayPayment,
+    simulateGatewayPayment,
+} from '../../integrations/payment-gateway/payment-gateway.client.js';
 import { creditWallet } from '../wallet/wallet.operations.js';
 import { findWalletByUserId } from '../wallet/wallet.repository.js';
 
@@ -28,6 +31,7 @@ import {
     idempotencyKeyHeaderSchema,
     webhookPayloadSchema,
     type CreatePaymentInput,
+    type SimulatePaymentInput,
 } from './payment.validator.js';
 
 /** The only payment provider PayLedger integrates with today. */
@@ -164,6 +168,63 @@ export const getPayment = async (
     }
 
     return toPaymentResponse(payment);
+};
+
+/**
+ * Proxies the Fake Payment Gateway's own test-checkout action so the
+ * User Panel can actually finish a deposit -- the gateway has no hosted
+ * checkout page, and the frontend must never call it directly, so this
+ * is the only legitimate way a CREATED/PROCESSING payment ever reaches a
+ * terminal state. The gateway call only triggers the real signed webhook;
+ * this function never sets `payment.status` itself, so the SUCCESS/FAILED
+ * transition and wallet credit always happen inside `processPaymentWebhook`
+ * exactly as they would for a real payment provider.
+ */
+export const simulatePayment = async (
+    id: string,
+    userId: string,
+    input: SimulatePaymentInput,
+    gatewayBaseUrl?: string,
+): Promise<PaymentResponse> => {
+    const payment = await findPaymentByIdForUser(id, userId);
+
+    if (!payment) {
+        throw new NotFoundError(
+            ERROR_MESSAGES.PAYMENT_NOT_FOUND,
+            ERROR_CODES.PAYMENT_NOT_FOUND,
+        );
+    }
+
+    if (
+        payment.status !== PaymentStatus.CREATED &&
+        payment.status !== PaymentStatus.PROCESSING
+    ) {
+        throw new BusinessRuleError(
+            ERROR_MESSAGES.PAYMENT_NOT_COMPLETABLE,
+            ERROR_CODES.PAYMENT_NOT_COMPLETABLE,
+        );
+    }
+
+    if (!payment.paymentId) {
+        throw new BusinessRuleError(
+            ERROR_MESSAGES.PAYMENT_NOT_COMPLETABLE,
+            ERROR_CODES.PAYMENT_NOT_COMPLETABLE,
+        );
+    }
+
+    await simulateGatewayPayment(
+        payment.paymentId,
+        input.outcome,
+        input.reason,
+        gatewayBaseUrl,
+    );
+
+    // The webhook triggered by the call above has already been delivered
+    // and processed by the time the gateway responds (it awaits delivery
+    // before replying) -- re-read our own row rather than assume.
+    const updated = await findPaymentByIdForUser(id, userId);
+
+    return toPaymentResponse(updated ?? payment);
 };
 
 export const processPaymentWebhook = async (

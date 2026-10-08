@@ -24,7 +24,7 @@ import { register } from '../auth/auth.service.js';
 import { findWalletByUserId } from '../wallet/wallet.repository.js';
 
 import { verifyWebhookSignature } from './payment.controller.js';
-import { createPayment } from './payment.service.js';
+import { createPayment, simulatePayment } from './payment.service.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
@@ -1132,6 +1132,413 @@ describe('Payment domain', () => {
                 .from(ledgerEntries)
                 .where(eq(ledgerEntries.walletId, user.walletId));
             expect(entries).toHaveLength(0);
+        });
+    });
+
+    describe('POST /api/v1/payments/:id/simulate', () => {
+        type OrderState = {
+            orderId: string;
+            amountPaise: number;
+            status: 'CREATED' | 'SUCCESS' | 'FAILED';
+        };
+
+        /**
+         * A per-test gateway that behaves like the real Fake Payment
+         * Gateway end-to-end: it tracks the order created for this test
+         * and, on /success or /failure, delivers a genuinely signed
+         * webhook back to this same `app` via supertest (not a raw
+         * fetch to some externally-running process) — exactly mirroring
+         * production's "gateway awaits webhook delivery before
+         * responding" behavior, so simulatePayment()'s re-read-after-call
+         * is exercised the same way it is for real.
+         */
+        const startSimulationGateway = async () => {
+            const orders = new Map<string, OrderState>();
+
+            const server = createServer((req, res) => {
+                let data = '';
+
+                req.on('data', (chunk: Buffer) => {
+                    data += chunk.toString('utf8');
+                });
+
+                req.on('end', () => {
+                    void (async () => {
+                        const url = req.url ?? '';
+
+                        if (
+                            req.method === 'POST' &&
+                            url === '/api/v1/gateway/payments'
+                        ) {
+                            const body = JSON.parse(data) as {
+                                orderId: string;
+                                amount: number;
+                            };
+                            const paymentId = randomUUID();
+                            orders.set(paymentId, {
+                                orderId: body.orderId,
+                                amountPaise: body.amount,
+                                status: 'CREATED',
+                            });
+
+                            res.writeHead(201, {
+                                'Content-Type': 'application/json',
+                            });
+                            res.end(
+                                JSON.stringify({
+                                    success: true,
+                                    code: 'CREATED',
+                                    message: 'Operation successful',
+                                    requestId: randomUUID(),
+                                    data: {
+                                        id: randomUUID(),
+                                        orderId: body.orderId,
+                                        paymentId,
+                                        amount: body.amount / 100,
+                                        currency: 'INR',
+                                        status: 'CREATED',
+                                    },
+                                }),
+                            );
+                            return;
+                        }
+
+                        const match = /^\/api\/v1\/gateway\/payments\/([^/]+)\/(success|failure)$/.exec(
+                            url,
+                        );
+
+                        if (req.method === 'POST' && match) {
+                            const [, paymentId, action] = match;
+                            const order = paymentId
+                                ? orders.get(paymentId)
+                                : undefined;
+
+                            if (!order) {
+                                res.writeHead(404, {
+                                    'Content-Type': 'application/json',
+                                });
+                                res.end(
+                                    JSON.stringify({
+                                        success: false,
+                                        code: 'NOT_FOUND',
+                                        message: 'Gateway payment not found',
+                                        requestId: randomUUID(),
+                                    }),
+                                );
+                                return;
+                            }
+
+                            const outcome =
+                                action === 'success' ? 'SUCCESS' : 'FAILED';
+                            order.status = outcome;
+
+                            const webhookPayload: Record<string, unknown> = {
+                                orderId: order.orderId,
+                                paymentId,
+                                status: outcome,
+                                amount: order.amountPaise,
+                            };
+
+                            if (outcome === 'FAILED') {
+                                const body = data
+                                    ? (JSON.parse(data) as {
+                                          reason?: string;
+                                      })
+                                    : {};
+                                webhookPayload.failureReason =
+                                    body.reason ?? 'Payment declined';
+                            }
+
+                            // Awaited before responding -- same ordering
+                            // guarantee the real gateway makes.
+                            await postWebhook(webhookPayload);
+
+                            res.writeHead(200, {
+                                'Content-Type': 'application/json',
+                            });
+                            res.end(
+                                JSON.stringify({
+                                    success: true,
+                                    code: 'SUCCESS',
+                                    message: 'Operation successful',
+                                    requestId: randomUUID(),
+                                    data: {
+                                        id: randomUUID(),
+                                        orderId: order.orderId,
+                                        paymentId,
+                                        amount: order.amountPaise / 100,
+                                        currency: 'INR',
+                                        status: outcome,
+                                    },
+                                }),
+                            );
+                            return;
+                        }
+
+                        res.writeHead(404, {
+                            'Content-Type': 'application/json',
+                        });
+                        res.end(
+                            JSON.stringify({
+                                success: false,
+                                code: 'NOT_FOUND',
+                                message: 'Not found',
+                                requestId: randomUUID(),
+                            }),
+                        );
+                    })();
+                });
+            });
+
+            await new Promise<void>((resolve) => {
+                server.listen(0, '127.0.0.1', () => resolve());
+            });
+
+            const address = server.address();
+            const port =
+                typeof address === 'object' && address ? address.port : 0;
+
+            return {
+                url: `http://127.0.0.1:${port}`,
+                close: () =>
+                    new Promise<void>((resolve) => server.close(() => resolve())),
+            };
+        };
+
+        it('successful simulation settles through the real signed webhook and credits the wallet exactly once', async () => {
+            const user = await createTestUser();
+            const gateway = await startSimulationGateway();
+
+            try {
+                const created = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                const balanceBefore = await getWalletBalance(user.walletId);
+
+                const result = await simulatePayment(
+                    created.id,
+                    user.userId,
+                    { outcome: 'SUCCESS' },
+                    gateway.url,
+                );
+
+                expect(result.status).toBe('SUCCESS');
+
+                const balanceAfter = await getWalletBalance(user.walletId);
+                expect(balanceAfter - balanceBefore).toBe(100000n);
+
+                const [depositTx] = await db
+                    .select()
+                    .from(transactions)
+                    .where(eq(transactions.sourceId, created.id));
+                expect(depositTx?.type).toBe('DEPOSIT');
+                expect(depositTx?.status).toBe('COMPLETED');
+
+                const entries = await db
+                    .select()
+                    .from(ledgerEntries)
+                    .where(eq(ledgerEntries.transactionId, depositTx!.id));
+                expect(entries).toHaveLength(1);
+                expect(entries[0]?.direction).toBe('CREDIT');
+                expect(entries[0]?.amountPaise).toBe(100000n);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('failed simulation settles through the real signed webhook, leaves the wallet unchanged, and creates no deposit transaction or ledger entries', async () => {
+            const user = await createTestUser();
+            const gateway = await startSimulationGateway();
+
+            try {
+                const created = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                const balanceBefore = await getWalletBalance(user.walletId);
+
+                const result = await simulatePayment(
+                    created.id,
+                    user.userId,
+                    { outcome: 'FAILED', reason: 'Card declined' },
+                    gateway.url,
+                );
+
+                expect(result.status).toBe('FAILED');
+                expect(await getWalletBalance(user.walletId)).toBe(
+                    balanceBefore,
+                );
+
+                const txns = await db
+                    .select()
+                    .from(transactions)
+                    .where(eq(transactions.sourceId, created.id));
+                expect(txns).toHaveLength(0);
+
+                const entries = await db
+                    .select()
+                    .from(ledgerEntries)
+                    .where(eq(ledgerEntries.walletId, user.walletId));
+                expect(entries).toHaveLength(0);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it.each(['SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED'] as const)(
+            'rejects simulating an already-terminal (%s) payment with PAYMENT_NOT_COMPLETABLE',
+            async (terminalStatus) => {
+                const user = await createTestUser();
+                const created = await createPaymentFor(user.cookie, 1000);
+
+                await db
+                    .update(payments)
+                    .set({ status: terminalStatus })
+                    .where(eq(payments.id, created.body.data.id));
+
+                const res = await request(app)
+                    .post(`/api/v1/payments/${created.body.data.id}/simulate`)
+                    .set('Cookie', user.cookie)
+                    .send({ outcome: 'SUCCESS' });
+
+                expect(res.status).toBe(422);
+                expect(res.body.code).toBe('PAYMENT_NOT_COMPLETABLE');
+            },
+        );
+
+        it('returns 404 for an unknown payment id', async () => {
+            const user = await createTestUser();
+
+            const res = await request(app)
+                .post(`/api/v1/payments/${randomUUID()}/simulate`)
+                .set('Cookie', user.cookie)
+                .send({ outcome: 'SUCCESS' });
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('PAYMENT_NOT_FOUND');
+        });
+
+        it("rejects simulating another user's payment (never leaks its existence)", async () => {
+            const owner = await createTestUser();
+            const intruder = await createTestUser();
+            const created = await createPaymentFor(owner.cookie, 1000);
+
+            const res = await request(app)
+                .post(`/api/v1/payments/${created.body.data.id}/simulate`)
+                .set('Cookie', intruder.cookie)
+                .send({ outcome: 'SUCCESS' });
+
+            expect(res.status).toBe(404);
+            expect(res.body.code).toBe('PAYMENT_NOT_FOUND');
+
+            // The owner's payment itself must be completely unaffected.
+            const [payment] = await db
+                .select()
+                .from(payments)
+                .where(eq(payments.id, created.body.data.id));
+            expect(payment?.status).toBe('CREATED');
+        });
+
+        it('two concurrent simulations of the same payment settle exactly once — never a double credit', async () => {
+            const user = await createTestUser();
+            const gateway = await startSimulationGateway();
+
+            try {
+                const created = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                const balanceBefore = await getWalletBalance(user.walletId);
+
+                const results = await Promise.allSettled([
+                    simulatePayment(
+                        created.id,
+                        user.userId,
+                        { outcome: 'SUCCESS' },
+                        gateway.url,
+                    ),
+                    simulatePayment(
+                        created.id,
+                        user.userId,
+                        { outcome: 'SUCCESS' },
+                        gateway.url,
+                    ),
+                ]);
+
+                const fulfilled = results.filter(
+                    (r) => r.status === 'fulfilled',
+                );
+                const rejected = results.filter((r) => r.status === 'rejected');
+
+                // Either both observed it already SUCCESS (idempotent
+                // replay) or exactly one raced ahead of the other's
+                // precondition check -- either way, settlement itself
+                // must have happened exactly once.
+                expect(fulfilled.length).toBeGreaterThanOrEqual(1);
+                expect(fulfilled.length + rejected.length).toBe(2);
+
+                const balanceAfter = await getWalletBalance(user.walletId);
+                expect(balanceAfter - balanceBefore).toBe(100000n);
+
+                const [depositTx] = await db
+                    .select()
+                    .from(transactions)
+                    .where(eq(transactions.sourceId, created.id));
+                expect(depositTx).toBeTruthy();
+
+                const entries = await db
+                    .select()
+                    .from(ledgerEntries)
+                    .where(eq(ledgerEntries.transactionId, depositTx!.id));
+                expect(entries).toHaveLength(1);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('never bypasses signed webhook settlement — an unsigned/invalid webhook still cannot complete a payment that simulate created', async () => {
+            const user = await createTestUser();
+            const gateway = await startSimulationGateway();
+
+            try {
+                const created = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                const balanceBefore = await getWalletBalance(user.walletId);
+
+                const res = await postWebhook(
+                    {
+                        orderId: created.orderId,
+                        paymentId: randomUUID(),
+                        status: 'SUCCESS',
+                        amount: 100000,
+                    },
+                    'not-a-real-signature',
+                );
+
+                expect(res.status).toBe(401);
+                expect(await getWalletBalance(user.walletId)).toBe(
+                    balanceBefore,
+                );
+
+                const [payment] = await db
+                    .select()
+                    .from(payments)
+                    .where(eq(payments.id, created.id));
+                expect(payment?.status).toBe('CREATED');
+            } finally {
+                await gateway.close();
+            }
         });
     });
 });

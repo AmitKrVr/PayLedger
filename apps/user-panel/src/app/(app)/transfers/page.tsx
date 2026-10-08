@@ -151,8 +151,15 @@ export default function TransfersPage() {
       {step === "amount" && recipient && (
         <Card className="w-full sm:max-w-md">
           <CardHeader>
-            <CardTitle>Sending to {recipient.name}</CardTitle>
-            <CardDescription>Enter how much to send.</CardDescription>
+            <div className="flex items-center gap-3">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+                {recipient.name.charAt(0).toUpperCase()}
+              </span>
+              <div>
+                <CardTitle>{recipient.name}</CardTitle>
+                <CardDescription>Enter how much to send.</CardDescription>
+              </div>
+            </div>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleContinueToConfirm} className="flex flex-col gap-4">
@@ -197,9 +204,14 @@ export default function TransfersPage() {
             <CardDescription>Review before you send.</CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Recipient</span>
-              <span className="font-medium text-foreground">{recipient.name}</span>
+            <div className="flex items-center gap-3 rounded-xl bg-muted px-3.5 py-3">
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-foreground">
+                {recipient.name.charAt(0).toUpperCase()}
+              </span>
+              <div>
+                <p className="text-sm font-medium text-foreground">{recipient.name}</p>
+                <p className="text-xs text-muted-foreground">Recipient</p>
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">Amount</span>

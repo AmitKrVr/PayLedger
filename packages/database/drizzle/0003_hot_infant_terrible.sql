@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "wallets_system_singleton_idx" ON "wallets" USING btree ("wallet_type") WHERE "wallets"."wallet_type" = 'SYSTEM';

@@ -32,6 +32,7 @@ import {
   withdrawalStatusVariant,
 } from "@/lib/withdrawals/status"
 
+import { WithdrawalDetailSheet } from "./_components/withdrawal-detail-sheet"
 import { WithdrawalRowActions } from "./_components/withdrawal-row-actions"
 
 const PAGE_SIZE = 20
@@ -60,6 +61,7 @@ function formatAmount(amount: number): string {
 export default function WithdrawalsPage() {
   const [page, setPage] = React.useState(1)
   const [status, setStatus] = React.useState<StatusFilter>("ALL")
+  const [detailId, setDetailId] = React.useState<string | null>(null)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useWithdrawalsQuery({
     page,
@@ -155,7 +157,10 @@ export default function WithdrawalsPage() {
                     {formatDate(withdrawal.processedAt)}
                   </TableCell>
                   <TableCell>
-                    <WithdrawalRowActions withdrawal={withdrawal} />
+                    <WithdrawalRowActions
+                      withdrawal={withdrawal}
+                      onView={() => setDetailId(withdrawal.id)}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -196,6 +201,11 @@ export default function WithdrawalsPage() {
           </div>
         )}
       </div>
+
+      <WithdrawalDetailSheet
+        withdrawalId={detailId}
+        onOpenChange={(open) => !open && setDetailId(null)}
+      />
     </PageLayout>
   )
 }

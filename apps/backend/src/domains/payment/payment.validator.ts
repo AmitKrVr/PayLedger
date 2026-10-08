@@ -24,6 +24,19 @@ export const idempotencyKeyHeaderSchema = z.object({
     }),
 });
 
+// Lets an authenticated user drive their own CREATED/PROCESSING payment to
+// a terminal state via the Fake Payment Gateway's simulate endpoints --
+// this is the gateway's own test-checkout action, proxied through the
+// backend so the frontend never calls the gateway directly. The resulting
+// SUCCESS/FAILED state always arrives back through the normal signed
+// webhook, never set directly by this endpoint.
+export const simulatePaymentSchema = z.object({
+    outcome: z.enum(['SUCCESS', 'FAILED'], {
+        error: 'outcome must be SUCCESS or FAILED',
+    }),
+    reason: z.string().trim().min(1).max(500).optional(),
+});
+
 export const webhookPayloadSchema = z.object({
     orderId: z.string({ error: 'orderId is required' }).min(1),
     paymentId: z.string({ error: 'paymentId is required' }).min(1),
@@ -42,3 +55,4 @@ export const webhookPayloadSchema = z.object({
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type PaymentIdParams = z.infer<typeof paymentIdParamsSchema>;
 export type WebhookPayload = z.infer<typeof webhookPayloadSchema>;
+export type SimulatePaymentInput = z.infer<typeof simulatePaymentSchema>;

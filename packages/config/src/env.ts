@@ -64,6 +64,7 @@ const envSchema = z.object({
     JWT_AUDIENCE: z.string().min(1),
     JWT_ACCESS_TTL: z.string().min(1).default('15m'),
     JWT_REFRESH_TTL: z.string().min(1).default('30d'),
+    COOKIE_DOMAIN: z.string().min(1).optional(),
 
     AUTH_MAX_FAILED_LOGIN_ATTEMPTS: z.coerce.number().int().positive().default(5),
     AUTH_LOCK_DURATION_MINUTES: z.coerce.number().int().positive().default(15),

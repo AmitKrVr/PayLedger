@@ -1,8 +1,8 @@
 "use client"
 
-import Link from "next/link"
-import { ArrowLeftRight, Info, Landmark, RotateCw } from "lucide-react"
+import { Info, RotateCw } from "lucide-react"
 
+import { BalanceCard } from "@/components/balance-card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -54,21 +54,9 @@ export default function WalletPage() {
 
       {wallet && (
         <>
-          <Card className="bg-primary text-primary-foreground border-primary">
-            <CardContent className="flex flex-col gap-1 pt-5">
-              <p className="text-sm text-primary-foreground/80">Available balance</p>
-              <p className="text-3xl sm:text-4xl font-bold tracking-tight">
-                {formatInr(wallet.available)}
-              </p>
-              {wallet.status === "BLOCKED" && (
-                <div className="mt-2">
-                  <StatusPill tone="danger">Wallet blocked</StatusPill>
-                </div>
-              )}
-            </CardContent>
-          </Card>
+          <BalanceCard wallet={wallet} />
 
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -76,7 +64,9 @@ export default function WalletPage() {
                 </CardTitle>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="text-xl font-semibold text-foreground">{formatInr(wallet.balance)}</p>
+                <p className="text-lg font-semibold text-foreground sm:text-xl">
+                  {formatInr(wallet.balance)}
+                </p>
               </CardContent>
             </Card>
             <Card>
@@ -94,30 +84,23 @@ export default function WalletPage() {
                 </Tooltip>
               </CardHeader>
               <CardContent className="pt-0">
-                <p className="text-xl font-semibold text-foreground">{formatInr(wallet.held)}</p>
+                <p className="text-lg font-semibold text-foreground sm:text-xl">
+                  {formatInr(wallet.held)}
+                </p>
               </CardContent>
             </Card>
-          </div>
-
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <Link href="/payments">
-              <Button variant="secondary" size="lg" className="w-full">
-                <Landmark className="size-4" />
-                Add Money
-              </Button>
-            </Link>
-            <Link href="/transfers">
-              <Button variant="secondary" size="lg" className="w-full">
-                <ArrowLeftRight className="size-4" />
-                Send Money
-              </Button>
-            </Link>
-            <Link href="/withdrawals">
-              <Button variant="secondary" size="lg" className="w-full">
-                <Landmark className="size-4" />
-                Withdraw
-              </Button>
-            </Link>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">
+                  Status
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0">
+                <StatusPill tone={wallet.status === "ACTIVE" ? "success" : "danger"}>
+                  {wallet.status}
+                </StatusPill>
+              </CardContent>
+            </Card>
           </div>
         </>
       )}

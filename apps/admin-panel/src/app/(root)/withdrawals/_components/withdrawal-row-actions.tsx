@@ -23,9 +23,12 @@ const MIN_REASON_LENGTH = 3
 
 export function WithdrawalRowActions({
   withdrawal,
+  onView,
 }: {
   withdrawal: WithdrawalListItem
+  onView?: () => void
 }) {
+  const [approveOpen, setApproveOpen] = React.useState(false)
   const [rejectOpen, setRejectOpen] = React.useState(false)
   const [reason, setReason] = React.useState("")
 
@@ -33,15 +36,23 @@ export function WithdrawalRowActions({
   const rejectMutation = useRejectWithdrawal()
 
   if (withdrawal.status !== "PENDING") {
-    return null
+    return onView ? (
+      <div className="flex items-center justify-end">
+        <Button size="sm" variant="ghost" onClick={onView}>
+          View
+        </Button>
+      </div>
+    ) : null
   }
 
   const handleApprove = () => {
     approveMutation.mutate(withdrawal.id, {
       onSuccess: () => {
+        setApproveOpen(false)
         toast.success(`Withdrawal approved for ${withdrawal.user.name}`)
       },
       onError: (error) => {
+        setApproveOpen(false)
         toast.error(getApiErrorMessage(error, "Failed to approve withdrawal"))
       },
     })
@@ -67,18 +78,44 @@ export function WithdrawalRowActions({
 
   return (
     <div className="flex items-center justify-end gap-2">
-      <Button
-        size="sm"
-        variant="default"
-        disabled={approveMutation.isPending || rejectMutation.isPending}
-        onClick={handleApprove}
-      >
-        {approveMutation.isPending ? (
-          <Loader2 className="size-3.5 animate-spin" />
-        ) : (
-          "Approve"
-        )}
-      </Button>
+      {onView && (
+        <Button size="sm" variant="ghost" onClick={onView}>
+          View
+        </Button>
+      )}
+
+      <Dialog open={approveOpen} onOpenChange={setApproveOpen}>
+        <Button
+          size="sm"
+          variant="default"
+          disabled={approveMutation.isPending || rejectMutation.isPending}
+          onClick={() => setApproveOpen(true)}
+        >
+          Approve
+        </Button>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Approve withdrawal</DialogTitle>
+            <DialogDescription>
+              Approving {withdrawal.user.name}&apos;s withdrawal of{" "}
+              {withdrawal.amount.toLocaleString("en-IN")} permanently deducts the
+              held amount from their wallet. This cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <DialogClose render={<Button variant="outline" />}>
+              Cancel
+            </DialogClose>
+            <Button disabled={approveMutation.isPending} onClick={handleApprove}>
+              {approveMutation.isPending ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                "Confirm approval"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={rejectOpen}

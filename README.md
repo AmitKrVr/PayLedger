@@ -1,159 +1,173 @@
-# Turborepo starter
+# PayLedger
 
-This Turborepo starter is maintained by the Turborepo core team.
+A digital wallet platform: users add money, send money to other users, and
+request withdrawals; admins review withdrawals and reverse completed
+transfers. See `docs/BRD.md`, `docs/ARCHITECTURE.md`, `docs/TECHNICAL.md`,
+and `docs/DECISIONS.md` for the full product/technical spec.
 
-## Using this example
+## Apps
 
-Run the following command:
+| App | Path | Default port |
+|---|---|---|
+| Backend API | `apps/backend` | 5001 |
+| Fake Payment Gateway | `apps/payment-gateway` | 5002 |
+| User Panel (Next.js) | `apps/user-panel` | 3000 |
+| Admin Panel (Next.js) | `apps/admin-panel` | 3001 |
 
-```sh
-npx create-turbo@latest
-```
+Shared code lives in `packages/database` (Drizzle schema/migrations),
+`packages/shared`, and `packages/config` (environment validation).
 
-## What's inside?
-
-This Turborepo includes the following packages/apps:
-
-### Apps and Packages
-
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `@next/eslint-plugin-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
-
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
-
-### Utilities
-
-This Turborepo has some additional tools already setup for you:
-
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
-
-### Build
-
-To build all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## 1. Install
 
 ```sh
-cd my-turborepo
-turbo build
+pnpm install
 ```
 
-Without global `turbo`, use your package manager:
+## 2. Configure environment
+
+**Backend + Fake Payment Gateway** share a single root `.env` (loaded via
+`@payledger/config`). Copy it and fill in real values for your machine:
 
 ```sh
-cd my-turborepo
-npx turbo build
-pnpm exec turbo build
-pnpm exec turbo build
+cp .env.example .env
 ```
 
-You can build a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Key variables: `DATABASE_URL`, `REDIS_URL`, `JWT_ACCESS_SECRET` /
+`JWT_REFRESH_SECRET`, `PAYMENT_GATEWAY_BASE_URL` (where the gateway listens),
+`PAYLEDGER_WEBHOOK_URL` (where the gateway sends webhooks back to — must
+point at the backend), and `PAYMENT_WEBHOOK_SECRET` (must be the **same**
+value on both sides — it's the HMAC key used to sign/verify webhooks).
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+Financial limits (`PAYMENT_MIN_DEPOSIT_INR`, `PAYMENT_MAX_DEPOSIT_INR`,
+`TRANSFER_MAX_AMOUNT_INR`, `TRANSFER_DAILY_LIMIT_INR`, `TRANSFER_FEE_PERCENT`,
+`TRANSFER_FEE_MIN_INR`, `TRANSFER_FEE_MAX_INR`, `WITHDRAWAL_MIN_AMOUNT_INR`,
+`WITHDRAWAL_MAX_AMOUNT_INR`) are **environment-driven, not hardcoded** — change
+them in `.env` and restart the backend; no code change is required.
+
+**User Panel / Admin Panel** each need their own `.env.local`:
 
 ```sh
-turbo build --filter=docs
+echo "NEXT_PUBLIC_API_URL=http://localhost:5001/api" > apps/user-panel/.env.local
+echo "NEXT_PUBLIC_API_URL=http://localhost:5001/api" > apps/admin-panel/.env.local
 ```
 
-Without global `turbo`:
+Never commit a real `.env` or `.env.local` — only `.env.example` belongs in git.
+
+## 3. Start PostgreSQL and Redis
+
+Point `DATABASE_URL`/`REDIS_URL` at a running PostgreSQL and Redis instance —
+locally installed, or in Docker containers you manage yourself. There is
+currently no checked-in `docker-compose.yml` for this; see "Known
+limitations" below.
+
+## 4. Run migrations
 
 ```sh
-npx turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
+pnpm --filter @payledger/database db:migrate
 ```
 
-### Develop
-
-To develop all apps and packages, run the following command:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+## 5. Create an admin account
 
 ```sh
-cd my-turborepo
-turbo dev
+pnpm --filter backend admin:create
 ```
 
-Without global `turbo`, use your package manager:
+Interactive prompt — asks for name, email, mobile, and password, then
+creates an `ADMIN` row you can log into the Admin Panel with.
+
+## 6. Ensure the SYSTEM wallet exists
+
+Transfers move the fee into a single `SYSTEM`-type wallet (not tied to any
+user). It is data, not schema, so it isn't created by a migration:
 
 ```sh
-cd my-turborepo
-npx turbo dev
-pnpm exec turbo dev
-pnpm exec turbo dev
+pnpm --filter backend wallet:create-system
 ```
 
-You can develop a specific package by using a [filter](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters):
+Safe to re-run — it's a no-op if the SYSTEM wallet already exists.
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+## 7. Start the applications
+
+Everything together:
 
 ```sh
-turbo dev --filter=web
+pnpm dev
 ```
 
-Without global `turbo`:
+Or individually, with pnpm filters:
 
 ```sh
-npx turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
+pnpm --filter backend dev
+pnpm --filter payment-gateway dev
+pnpm --filter user-panel dev
+pnpm --filter admin-panel dev
 ```
 
-### Remote Caching
+## 8. The fake payment (Add Money) flow
 
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
+The User Panel never talks to the Fake Payment Gateway directly — only the
+backend does:
 
-Turborepo can use a technique known as [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
+```text
+User Panel: POST /api/v1/payments (create)
+  -> Backend creates a PayLedger payment row (status CREATED)
+  -> Backend calls the Fake Payment Gateway to create a matching gateway order
 
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+User Panel: POST /api/v1/payments/:id/simulate { outcome: "SUCCESS" | "FAILED" }
+  -> Backend calls the gateway's own test-checkout action for that order
+  -> Gateway sends a signed webhook back to the backend
+  -> Backend verifies the HMAC signature against the exact raw request body
+  -> Backend settles the payment (SUCCESS credits the wallet + creates a
+     DEPOSIT transaction + balanced ledger entry; FAILED changes nothing)
 
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed (recommended):
+User Panel: polls GET /api/v1/payments/:id until the status is terminal
+```
+
+The `/simulate` endpoint exists because the gateway has no real hosted
+checkout page — it's the only legitimate way to drive a deposit to
+completion from the product itself, and it never sets the payment's status
+directly: that only ever happens inside the signed-webhook handler, exactly
+as it would for a real payment provider. Repeated/duplicate webhook delivery
+is idempotent — it can never credit a wallet twice.
+
+## 9. Tests and checks
 
 ```sh
-cd my-turborepo
-turbo login
+pnpm check-types   # tsc --noEmit across every package
+pnpm lint          # eslint across every package
+pnpm test          # vitest for the backend (and payment-gateway, if it has tests)
+pnpm build         # production build of every app/package
 ```
 
-Without global `turbo`, use your package manager:
+Run a single backend test file directly when iterating:
 
 ```sh
-cd my-turborepo
-npx turbo login
-pnpm exec turbo login
-pnpm exec turbo login
+cd apps/backend
+npx vitest run src/domains/payment/payment.test.ts
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
-
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
-
-With [global `turbo`](https://turborepo.dev/docs/getting-started/installation#global-installation) installed:
+**Known flaky tests, by design of the test fixtures, not the financial
+logic:** a few concurrency tests in `transfer.test.ts`,
+`admin-transfer.test.ts`, and `admin-withdrawal.test.ts` share one SYSTEM
+wallet row and a Snowflake ID generator across test files. Run together with
+high parallelism, two files can occasionally collide on that shared state
+(or occasionally hit a Snowflake worker-ID collision) and fail with a
+balance-mismatch or timeout assertion that has nothing to do with the code
+under test. Run the affected file alone to get a clean, deterministic
+result:
 
 ```sh
-turbo link
+npx vitest run src/domains/transfer/transfer.test.ts
+npx vitest run src/domains/admin/transfer/admin-transfer.test.ts
+npx vitest run src/domains/admin/withdrawal/admin-withdrawal.test.ts
 ```
 
-Without global `turbo`:
+## 10. Known limitations
 
-```sh
-npx turbo link
-pnpm exec turbo link
-pnpm exec turbo link
-```
-
-## Useful Links
-
-Learn more about the power of Turborepo:
-
-- [Tasks](https://turborepo.dev/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.dev/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.dev/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.dev/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.dev/docs/reference/configuration)
-- [CLI Usage](https://turborepo.dev/docs/reference/command-line-reference)
+- No `docker-compose.yml` is currently checked in, despite `docs/ARCHITECTURE.md`
+  describing one for local Postgres/Redis — provide your own PostgreSQL and
+  Redis instances for now.
+- The Admin Panel cannot list or view transfers, payments, users, or audit
+  logs — the backend does not expose admin-facing read endpoints for those
+  domains yet (only withdrawal list/detail/approve/reject and transfer
+  reversal exist on the admin side).

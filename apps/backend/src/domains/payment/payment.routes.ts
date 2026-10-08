@@ -10,11 +10,13 @@ import {
     createPaymentController,
     getPaymentController,
     paymentWebhookSignatureMiddleware,
+    simulatePaymentController,
     webhookController,
 } from './payment.controller.js';
 import {
     createPaymentSchema,
     paymentIdParamsSchema,
+    simulatePaymentSchema,
 } from './payment.validator.js';
 
 const router = Router();
@@ -39,6 +41,14 @@ router.get(
     requireUserAuth,
     validateParams(paymentIdParamsSchema),
     getPaymentController,
+);
+
+router.post(
+    '/:id/simulate',
+    requireUserAuth,
+    validateParams(paymentIdParamsSchema),
+    validateBody(simulatePaymentSchema),
+    simulatePaymentController,
 );
 
 export default router;

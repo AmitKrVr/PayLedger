@@ -3,7 +3,7 @@
 import * as React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { ArrowLeftRight, Landmark, LogOut, Menu, Receipt, User, Wallet } from "lucide-react"
+import { ArrowLeftRight, Home, Landmark, LogOut, Menu, Receipt, User, Wallet } from "lucide-react"
 
 import { useLogout } from "@/hooks/use-logout"
 import { useAuthStore } from "@/store/use-auth-store"
@@ -20,6 +20,7 @@ import {
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 
 const NAV_ITEMS = [
+  { title: "Home", url: "/", icon: Home },
   { title: "Wallet", url: "/wallet", icon: Wallet },
   { title: "Add Money", url: "/payments", icon: Landmark },
   { title: "Transfer", url: "/transfers", icon: ArrowLeftRight },
@@ -29,7 +30,7 @@ const NAV_ITEMS = [
 
 function Brand() {
   return (
-    <Link href="/wallet" className="flex items-center gap-2 shrink-0">
+    <Link href="/" className="flex items-center gap-2 shrink-0">
       <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
         P
       </span>

@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { StatusPill } from "@/components/ui/status-pill"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { TransactionDetailDialog } from "@/components/transaction-detail-dialog"
+import { TransactionRow } from "@/components/transaction-row"
 import { useTransactionsQuery } from "@/hooks/use-transactions"
 import { getApiErrorMessage } from "@/lib/api/error-message"
 import type { TransactionStatus, TransactionType } from "@/lib/api/transactions"
@@ -232,44 +233,12 @@ export default function TransactionsPage() {
             </Table>
           </Card>
 
-          {/* Mobile: card list */}
-          <div className="flex flex-col gap-2 sm:hidden">
+          {/* Mobile: compact row list */}
+          <Card className="flex flex-col gap-1 p-2 sm:hidden">
             {items.map((txn) => (
-              <Card
-                key={txn.id}
-                className="cursor-pointer"
-                onClick={() => setSelectedId(txn.id)}
-              >
-                <CardContent className="flex items-center justify-between gap-3 p-4">
-                  <div className="flex flex-col gap-0.5 min-w-0">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {txn.type.replace("_", " ")}
-                      {txn.counterparty && (
-                        <span className="text-muted-foreground">
-                          {" "}
-                          · {txn.direction === "DEBIT" ? "to" : "from"} {txn.counterparty.name}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-xs text-muted-foreground">{formatDate(txn.createdAt)}</p>
-                  </div>
-                  <div className="flex flex-col items-end gap-1 shrink-0">
-                    <p
-                      className={
-                        txn.direction === "CREDIT"
-                          ? "text-sm font-semibold text-success"
-                          : "text-sm font-semibold text-foreground"
-                      }
-                    >
-                      {txn.direction === "CREDIT" ? "+" : "−"}
-                      {formatInr(txn.amount)}
-                    </p>
-                    <StatusPill tone={transactionStatusTone(txn.status)}>{txn.status}</StatusPill>
-                  </div>
-                </CardContent>
-              </Card>
+              <TransactionRow key={txn.id} transaction={txn} onClick={() => setSelectedId(txn.id)} />
             ))}
-          </div>
+          </Card>
         </>
       )}
 

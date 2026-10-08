@@ -10,7 +10,8 @@
         "lint": "eslint . --max-warnings 0",
         "check-types": "tsc --noEmit",
         "test": "vitest run",
-        "admin:create": "tsx src/scripts/create-admin.ts"
+        "admin:create": "tsx src/scripts/create-admin.ts",
+        "wallet:create-system": "tsx src/scripts/create-system-wallet.ts"
     },
     "keywords": [],
     "author": "",

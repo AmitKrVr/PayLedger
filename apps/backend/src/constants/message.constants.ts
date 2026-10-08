@@ -42,4 +42,6 @@ export const ERROR_MESSAGES = {
     INVALID_WEBHOOK_SIGNATURE: 'Invalid webhook signature',
     PAYMENT_GATEWAY_ERROR:
         'Unable to create the payment order with the payment gateway',
+    PAYMENT_NOT_COMPLETABLE:
+        'This payment is no longer pending and cannot be completed',
 } as const;
