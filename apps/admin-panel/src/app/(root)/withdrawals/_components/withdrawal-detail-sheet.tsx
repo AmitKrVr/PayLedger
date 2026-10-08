@@ -43,11 +43,15 @@ export function WithdrawalDetailSheet({
         <SheetHeader>
           <SheetTitle>Withdrawal detail</SheetTitle>
           <SheetDescription>
-            {withdrawal ? `ID ${withdrawal.id}` : "Loading withdrawal details"}
+            {withdrawal
+              ? withdrawal.reference
+                ? `Reference ${withdrawal.reference}`
+                : `${withdrawal.user.name}'s withdrawal`
+              : "Loading withdrawal details"}
           </SheetDescription>
         </SheetHeader>
 
-        <div className="flex flex-col gap-3 px-4 pb-4 text-sm">
+        <div className="flex min-h-48 flex-col gap-3 px-4 pb-4 text-sm">
           {isLoading && (
             <>
               <Skeleton className="h-5 w-full" />
@@ -64,9 +68,9 @@ export function WithdrawalDetailSheet({
 
           {withdrawal && (
             <>
-              <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">User</span>
-                <span className="font-medium text-foreground">{withdrawal.user.name}</span>
+              <div className="flex items-center justify-between gap-2">
+                <span className="shrink-0 text-muted-foreground">User</span>
+                <span className="truncate font-medium text-foreground">{withdrawal.user.name}</span>
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Mobile</span>
@@ -92,11 +96,11 @@ export function WithdrawalDetailSheet({
                 <span className="text-muted-foreground">Processed</span>
                 <span className="text-foreground">{formatDate(withdrawal.processedAt)}</span>
               </div>
-              {withdrawal.processedByAdminId && (
+              {withdrawal.processedByAdminName && (
                 <div className="flex items-center justify-between gap-2">
                   <span className="shrink-0 text-muted-foreground">Processed by</span>
-                  <span className="truncate font-mono text-xs text-foreground">
-                    {withdrawal.processedByAdminId}
+                  <span className="truncate font-medium text-foreground">
+                    {withdrawal.processedByAdminName}
                   </span>
                 </div>
               )}

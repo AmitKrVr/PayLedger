@@ -4,7 +4,7 @@ import type { RequestHandler } from 'express';
 import { AdminRole } from '@payledger/database';
 
 import { AuthenticationError } from './error.middleware.js';
-import { getAccessTokenCookieName } from '../lib/auth/cookies.js';
+import { getAccessTokenCookieName, type AuthRole } from '../lib/auth/cookies.js';
 import {
     verifyAccessToken,
     type AdminAccessTokenPayload,
@@ -46,9 +46,10 @@ const isAdminAccessTokenPayload = (
 
 const getAccessToken = (
     req: Express.Request,
+    role: AuthRole,
 ): string | null => {
     const token = req.cookies?.[
-        getAccessTokenCookieName()
+        getAccessTokenCookieName(role)
     ];
 
     return typeof token === 'string' ? token : null;
@@ -59,7 +60,7 @@ export const requireUserAuth: RequestHandler = async (
     _res,
     next,
 ) => {
-    const token = getAccessToken(req);
+    const token = getAccessToken(req, 'user');
 
     if (!token) {
         next(
@@ -106,7 +107,7 @@ export const requireAdminAuth: RequestHandler = async (
     _res,
     next,
 ) => {
-    const token = getAccessToken(req);
+    const token = getAccessToken(req, 'admin');
 
     if (!token) {
         next(

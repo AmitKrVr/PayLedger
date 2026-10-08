@@ -7,11 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useRegister } from "@/hooks/use-register"
 import { getApiErrorMessage } from "@/lib/api/error-message"
 import { registerSchema, type RegisterFormData } from "@/lib/schema"
+import { digitsOnly } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 
 export function RegisterForm() {
   const registerMutation = useRegister()
@@ -26,6 +28,8 @@ export function RegisterForm() {
     defaultValues: { name: "", mobile: "", email: "", password: "" },
   })
 
+  const mobileField = register("mobile")
+
   const onSubmit = (data: RegisterFormData) => {
     setError("root", { message: "" })
     registerMutation.mutate(data, {
@@ -36,9 +40,9 @@ export function RegisterForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm border-0 shadow-xl shadow-foreground/5">
       <CardHeader>
-        <CardTitle className="text-xl">Create your account</CardTitle>
+        <CardTitle className="text-2xl">Create your account</CardTitle>
         <CardDescription>It only takes a minute.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -54,8 +58,13 @@ export function RegisterForm() {
             <Input
               id="mobile"
               type="tel"
+              inputMode="numeric"
               placeholder="10-digit mobile number"
-              {...register("mobile")}
+              {...mobileField}
+              onChange={(e) => {
+                e.target.value = digitsOnly(e.target.value, 10)
+                mobileField.onChange(e)
+              }}
             />
             <FieldError>{errors.mobile?.message}</FieldError>
           </Field>
@@ -68,12 +77,7 @@ export function RegisterForm() {
 
           <Field>
             <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input
-              id="password"
-              type="password"
-              placeholder="At least 8 characters"
-              {...register("password")}
-            />
+            <PasswordInput id="password" placeholder="At least 8 characters" {...register("password")} />
             <FieldError>{errors.password?.message}</FieldError>
           </Field>
 

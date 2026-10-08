@@ -17,6 +17,7 @@
     "dependencies": {
         "@payledger/config": "workspace:*",
         "@payledger/database": "workspace:*",
+        "@payledger/shared": "workspace:*",
         "drizzle-orm": "^0.45.2",
         "express": "^5.2.1",
         "pino": "^10.4.0",

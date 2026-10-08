@@ -1,11 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server"
 
-// PayLedger's backend sets this same cookie name for both user and admin
-// sessions (role is distinguished by the JWT payload, not the cookie
-// name) -- this app only ever logs in as an admin, so its presence here
-// is a reasonable proxy for "an admin session might exist" ahead of the
-// real check (requireAdminAuth on the backend, via useSession()).
-const REFRESH_COOKIE_NAME = "refresh_token"
+const REFRESH_COOKIE_NAME = "admin_refresh_token"
 const LOGIN_PATH = "/login"
 
 export function proxy(request: NextRequest) {
@@ -20,6 +15,10 @@ export function proxy(request: NextRequest) {
       loginUrl.searchParams.set("from", fromPath)
     }
     return NextResponse.redirect(loginUrl)
+  }
+
+  if (isLoginPage && isAuthenticated) {
+    return NextResponse.redirect(new URL("/", request.url))
   }
 
   return NextResponse.next()

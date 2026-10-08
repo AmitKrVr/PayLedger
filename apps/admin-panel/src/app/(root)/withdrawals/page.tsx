@@ -1,6 +1,7 @@
 "use client"
 
 import * as React from "react"
+import { useSearchParams } from "next/navigation"
 import { Landmark } from "lucide-react"
 
 import { EmptyState } from "@/components/empty-state"
@@ -8,6 +9,7 @@ import { PageLayout } from "@/components/page-layout"
 import { RefreshButton } from "@/components/refresh-button"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   Select,
   SelectContent,
@@ -24,8 +26,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
 import { useWithdrawalsQuery } from "@/hooks/use-withdrawals"
 import { getApiErrorMessage } from "@/lib/api/error-message"
+import { computeSerial } from "@/lib/pagination"
 import type { WithdrawalStatus } from "@/lib/api/withdrawals"
 import {
   withdrawalStatusLabel,
@@ -59,13 +63,23 @@ function formatAmount(amount: number): string {
 }
 
 export default function WithdrawalsPage() {
+  const searchParams = useSearchParams()
+  const initialStatus = searchParams.get("status")
+
   const [page, setPage] = React.useState(1)
-  const [status, setStatus] = React.useState<StatusFilter>("ALL")
+  const [search, setSearch] = React.useState("")
+  const [status, setStatus] = React.useState<StatusFilter>(
+    initialStatus === "PENDING" || initialStatus === "APPROVED" || initialStatus === "REJECTED"
+      ? initialStatus
+      : "ALL"
+  )
   const [detailId, setDetailId] = React.useState<string | null>(null)
+  const debouncedSearch = useDebouncedValue(search)
 
   const { data, isLoading, isFetching, isError, error, refetch } = useWithdrawalsQuery({
     page,
     limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
     status: status === "ALL" ? undefined : status,
   })
 
@@ -77,7 +91,16 @@ export default function WithdrawalsPage() {
       title="Withdrawals"
       description="Review and process user withdrawal requests."
       actions={
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Search reference, user, mobile"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+            className="w-56"
+          />
           <Select
             value={status}
             onValueChange={(value) => {
@@ -104,6 +127,8 @@ export default function WithdrawalsPage() {
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-12 text-center">SN</TableHead>
+              <TableHead>Reference</TableHead>
               <TableHead>User</TableHead>
               <TableHead>Mobile</TableHead>
               <TableHead>Amount</TableHead>
@@ -117,7 +142,7 @@ export default function WithdrawalsPage() {
             {isLoading &&
               Array.from({ length: 5 }).map((_, index) => (
                 <TableRow key={index}>
-                  {Array.from({ length: 7 }).map((__, cellIndex) => (
+                  {Array.from({ length: 9 }).map((__, cellIndex) => (
                     <TableCell key={cellIndex}>
                       <Skeleton className="h-4 w-full" />
                     </TableCell>
@@ -127,7 +152,7 @@ export default function WithdrawalsPage() {
 
             {!isLoading && !isError && items.length === 0 && (
               <TableRow>
-                <TableCell colSpan={7} className="p-0">
+                <TableCell colSpan={9} className="p-0">
                   <EmptyState
                     icon={Landmark}
                     title="No withdrawals found"
@@ -138,8 +163,14 @@ export default function WithdrawalsPage() {
             )}
 
             {!isLoading &&
-              items.map((withdrawal) => (
+              items.map((withdrawal, index) => (
                 <TableRow key={withdrawal.id}>
+                  <TableCell className="text-muted-foreground text-center">
+                    {computeSerial(page, PAGE_SIZE, index)}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {withdrawal.reference ?? "—"}
+                  </TableCell>
                   <TableCell className="font-medium">{withdrawal.user.name}</TableCell>
                   <TableCell className="text-muted-foreground">
                     {withdrawal.user.mobile}
@@ -175,7 +206,7 @@ export default function WithdrawalsPage() {
           />
         )}
 
-        {meta && meta.totalItems > 0 && (
+        {meta && meta.totalPages > 1 && (
           <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3">
             <p className="text-xs text-muted-foreground">
               Page {meta.page} of {meta.totalPages} · {meta.totalItems} total

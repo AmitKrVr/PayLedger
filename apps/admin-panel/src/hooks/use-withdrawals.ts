@@ -34,6 +34,7 @@ export function useApproveWithdrawal() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "list"] })
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "detail", id] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     },
   })
 }
@@ -47,6 +48,7 @@ export function useRejectWithdrawal() {
     onSuccess: (_, { id }) => {
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "list"] })
       queryClient.invalidateQueries({ queryKey: ["withdrawals", "detail", id] })
+      queryClient.invalidateQueries({ queryKey: ["dashboard"] })
     },
   })
 }

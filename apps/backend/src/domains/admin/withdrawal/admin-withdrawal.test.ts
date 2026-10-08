@@ -58,7 +58,7 @@ const createTestAdmin = async () => {
 
     return {
         id: admin.id,
-        cookie: `access_token=${result.accessToken}`,
+        cookie: `admin_access_token=${result.accessToken}`,
     };
 };
 
@@ -267,7 +267,7 @@ describe('Admin Withdrawal domain', () => {
                 amount: 250,
                 status: 'PENDING',
                 rejectionReason: null,
-                processedByAdminId: null,
+                processedByAdminName: null,
             });
         });
     });

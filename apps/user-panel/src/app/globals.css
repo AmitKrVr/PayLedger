@@ -1,12 +1,10 @@
 @import "tailwindcss";
 
-@custom-variant dark (&:is(.dark *));
-
 @theme inline {
     --color-background: var(--background);
     --color-foreground: var(--foreground);
-    --font-sans: var(--font-geist-sans);
-    --font-mono: var(--font-geist-mono);
+    --font-sans: var(--font-sans);
+    --font-mono: var(--font-mono);
     --color-card: var(--card);
     --color-card-foreground: var(--card-foreground);
     --color-popover: var(--popover);
@@ -33,38 +31,40 @@
 }
 
 :root {
-    /* PayLedger User Panel -- clean, light, money-green consumer theme.
-     * Deliberately distinct from the admin panel's dark/blue palette. */
-    --background: oklch(98.5% 0.004 90);
-    --foreground: oklch(22% 0.02 260);
+    /* PayLedger User Panel -- "Noir": dark, precise, mono-numeral fintech.
+     * Deliberately distinct from the admin panel's palette, and from this
+     * app's own previous light theme -- a single fixed dark mode, no
+     * light/dark toggle. */
+    --background: #0a0c0b;
+    --foreground: #f2f5f3;
 
-    --card: oklch(100% 0 0);
-    --card-foreground: oklch(22% 0.02 260);
+    --card: #111411;
+    --card-foreground: #f2f5f3;
 
-    --popover: oklch(100% 0 0);
-    --popover-foreground: oklch(22% 0.02 260);
+    --popover: #151813;
+    --popover-foreground: #f2f5f3;
 
-    --primary: oklch(55% 0.14 155);
-    --primary-foreground: oklch(100% 0 0);
+    --primary: #b6ff3c;
+    --primary-foreground: #0a0c0b;
 
-    --secondary: oklch(95% 0.01 155);
-    --secondary-foreground: oklch(30% 0.03 155);
+    --secondary: #1a1e19;
+    --secondary-foreground: #f2f5f3;
 
-    --muted: oklch(95.5% 0.004 90);
-    --muted-foreground: oklch(50% 0.015 260);
+    --muted: #151813;
+    --muted-foreground: #8b938e;
 
-    --accent: oklch(93% 0.03 155);
-    --accent-foreground: oklch(30% 0.03 155);
+    --accent: #1a2113;
+    --accent-foreground: #b6ff3c;
 
-    --destructive: oklch(58% 0.2 25);
-    --destructive-foreground: oklch(100% 0 0);
+    --destructive: #e5484d;
+    --destructive-foreground: #ffffff;
 
-    --success: oklch(60% 0.15 150);
-    --success-foreground: oklch(100% 0 0);
+    --success: #b6ff3c;
+    --success-foreground: #0a0c0b;
 
-    --border: oklch(90% 0.006 90);
-    --input: oklch(90% 0.006 90);
-    --ring: oklch(55% 0.14 155);
+    --border: oklch(100% 0 0 / 8%);
+    --input: oklch(100% 0 0 / 11%);
+    --ring: #b6ff3c;
 
     --radius: 0.85rem;
 }

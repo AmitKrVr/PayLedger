@@ -1,7 +1,18 @@
 import { env } from '@payledger/config';
 import type { Response } from 'express';
 
-import { AUTH_COOKIE_NAMES } from '../../domains/auth/auth.constant.js';
+const COOKIE_NAMES = {
+    user: {
+        ACCESS_TOKEN: 'access_token',
+        REFRESH_TOKEN: 'refresh_token',
+    },
+    admin: {
+        ACCESS_TOKEN: 'admin_access_token',
+        REFRESH_TOKEN: 'admin_refresh_token',
+    },
+} as const;
+
+export type AuthRole = keyof typeof COOKIE_NAMES;
 
 const DURATION_UNIT_MS: Record<string, number> = {
     s: 1000,
@@ -41,10 +52,11 @@ const REFRESH_TOKEN_MAX_AGE_MS = parseDurationToMs(
 
 export const setAuthCookies = (
     res: Response,
+    role: AuthRole,
     accessToken: string,
     refreshToken: string,
 ): void => {
-    res.cookie(AUTH_COOKIE_NAMES.ACCESS_TOKEN, accessToken, {
+    res.cookie(COOKIE_NAMES[role].ACCESS_TOKEN, accessToken, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -53,7 +65,7 @@ export const setAuthCookies = (
         maxAge: ACCESS_TOKEN_MAX_AGE_MS,
     });
 
-    res.cookie(AUTH_COOKIE_NAMES.REFRESH_TOKEN, refreshToken, {
+    res.cookie(COOKIE_NAMES[role].REFRESH_TOKEN, refreshToken, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -65,8 +77,9 @@ export const setAuthCookies = (
 
 export const clearAuthCookies = (
     res: Response,
+    role: AuthRole,
 ): void => {
-    res.clearCookie(AUTH_COOKIE_NAMES.ACCESS_TOKEN, {
+    res.clearCookie(COOKIE_NAMES[role].ACCESS_TOKEN, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -74,7 +87,7 @@ export const clearAuthCookies = (
         path: '/',
     });
 
-    res.clearCookie(AUTH_COOKIE_NAMES.REFRESH_TOKEN, {
+    res.clearCookie(COOKIE_NAMES[role].REFRESH_TOKEN, {
         httpOnly: true,
         secure: env.NODE_ENV === 'production',
         sameSite: 'lax',
@@ -83,8 +96,8 @@ export const clearAuthCookies = (
     });
 };
 
-export const getAccessTokenCookieName = (): string =>
-    AUTH_COOKIE_NAMES.ACCESS_TOKEN;
+export const getAccessTokenCookieName = (role: AuthRole): string =>
+    COOKIE_NAMES[role].ACCESS_TOKEN;
 
-export const getRefreshTokenCookieName = (): string =>
-    AUTH_COOKIE_NAMES.REFRESH_TOKEN;
+export const getRefreshTokenCookieName = (role: AuthRole): string =>
+    COOKIE_NAMES[role].REFRESH_TOKEN;

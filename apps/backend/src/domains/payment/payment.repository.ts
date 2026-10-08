@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 import {
     db,
@@ -10,6 +10,46 @@ import {
     TransactionType,
     type DatabaseOrTransaction,
 } from '@payledger/database';
+
+const buildOwnershipConditions = (
+    userId: string,
+    status?: PaymentStatus,
+) => {
+    const conditions = [eq(payments.userId, userId)];
+
+    if (status) {
+        conditions.push(eq(payments.status, status));
+    }
+
+    return and(...conditions);
+};
+
+export const findPaymentsForUser = async (
+    userId: string,
+    filters: { status?: PaymentStatus; page: number; limit: number },
+    executor: DatabaseOrTransaction = db,
+) => {
+    return executor
+        .select()
+        .from(payments)
+        .where(buildOwnershipConditions(userId, filters.status))
+        .orderBy(desc(payments.createdAt), desc(payments.id))
+        .limit(filters.limit)
+        .offset((filters.page - 1) * filters.limit);
+};
+
+export const countPaymentsForUser = async (
+    userId: string,
+    filters: { status?: PaymentStatus },
+    executor: DatabaseOrTransaction = db,
+): Promise<number> => {
+    const [row] = await executor
+        .select({ count: sql<number>`count(*)::int` })
+        .from(payments)
+        .where(buildOwnershipConditions(userId, filters.status));
+
+    return row?.count ?? 0;
+};
 
 export const findPaymentByIdForUser = async (
     id: string,

@@ -1,10 +1,12 @@
 "use client"
 
 import * as React from "react"
+import type { SubmitEvent } from "react"
 import { useQueryClient } from "@tanstack/react-query"
-import { Landmark } from "lucide-react"
+import { ArrowUpFromLine, Landmark } from "lucide-react"
 import { toast } from "sonner"
 
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Pagination } from "@/components/ui/pagination"
 import { Skeleton } from "@/components/ui/skeleton"
 import { StatusPill } from "@/components/ui/status-pill"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { WithdrawalDetailDialog } from "@/components/withdrawal-detail-dialog"
 import { useLimitsQuery } from "@/hooks/use-config"
 import { useWalletQuery } from "@/hooks/use-wallet"
@@ -20,7 +23,9 @@ import { useCreateWithdrawal, useWithdrawalsQuery } from "@/hooks/use-withdrawal
 import { getApiErrorMessage } from "@/lib/api/error-message"
 import type { Withdrawal } from "@/lib/api/withdrawals"
 import { formatInr } from "@/lib/money"
+import { computeSerial } from "@/lib/pagination"
 import { withdrawalStatusTone } from "@/lib/status"
+import { blockInvalidNumberKeys } from "@/lib/utils"
 
 const PAGE_SIZE = 10
 
@@ -44,7 +49,7 @@ export default function WithdrawalsPage() {
   const withdrawMutation = useCreateWithdrawal()
   const history = useWithdrawalsQuery({ page, limit: PAGE_SIZE })
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e: SubmitEvent<HTMLFormElement>) => {
     e.preventDefault()
     setFormError(null)
 
@@ -92,161 +97,228 @@ export default function WithdrawalsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-foreground">Withdraw</h1>
+      <PageHeader
+        icon={ArrowUpFromLine}
+        title="Withdraw"
+        description="Move money from your wallet to your bank."
+        tint="amber"
+      />
 
-      {!result && (
-        <Card className="w-full sm:max-w-md">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        <div className="flex flex-col gap-6">
+          {!result && (
+            <Card>
+              <CardHeader>
+                <CardTitle>How much would you like to withdraw?</CardTitle>
+                <CardDescription>
+                  Withdrawals are reviewed by our team before funds are released.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {wallet && wallet.status !== "ACTIVE" && (
+                  <Alert variant="destructive" className="mb-4">
+                    <AlertDescription>
+                      Your wallet is {wallet.status.toLowerCase()}. Withdrawals are unavailable
+                      until it&apos;s active again.
+                    </AlertDescription>
+                  </Alert>
+                )}
+
+                <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+                  {wallet && (
+                    <div className="flex items-center justify-between rounded-xl bg-muted px-3.5 py-2.5 text-sm">
+                      <span className="text-muted-foreground">Available balance</span>
+                      <span className="font-mono font-medium text-foreground">{formatInr(wallet.available)}</span>
+                    </div>
+                  )}
+
+                  <Field>
+                    <FieldLabel htmlFor="amount">Amount (INR)</FieldLabel>
+                    <Input
+                      id="amount"
+                      type="number"
+                      inputMode="decimal"
+                      min={limits?.withdrawal.minAmount ?? 1}
+                      max={limits?.withdrawal.maxAmount}
+                      step="0.01"
+                      autoFocus
+                      placeholder="e.g. 500"
+                      onKeyDown={blockInvalidNumberKeys}
+                      value={amountInput}
+                      onChange={(e) => setAmountInput(e.target.value)}
+                      disabled={wallet ? wallet.status !== "ACTIVE" : false}
+                    />
+                    {limits && (
+                      <p className="text-xs text-muted-foreground">
+                        Min {formatInr(limits.withdrawal.minAmount)} · Max{" "}
+                        {formatInr(limits.withdrawal.maxAmount)} per request
+                      </p>
+                    )}
+                    <FieldError>{formError}</FieldError>
+                  </Field>
+
+                  <Button
+                    type="submit"
+                    size="lg"
+                    isLoading={withdrawMutation.isPending}
+                    disabled={wallet ? wallet.status !== "ACTIVE" : false}
+                  >
+                    Request withdrawal
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          )}
+
+          {result && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Withdrawal requested</CardTitle>
+                <CardDescription>
+                  Your request is pending review. We&apos;ll release funds once it&apos;s
+                  processed by our team &mdash; this is not instant.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Amount</span>
+                  <span className="font-mono font-semibold text-foreground">{formatInr(result.amount)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-muted-foreground">Status</span>
+                  <StatusPill tone={withdrawalStatusTone(result.status)}>{result.status}</StatusPill>
+                </div>
+
+                <Button variant="outline" className="mt-2" onClick={startNew}>
+                  Request another withdrawal
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        <Card>
           <CardHeader>
-            <CardTitle>How much would you like to withdraw?</CardTitle>
-            <CardDescription>
-              Withdrawals are reviewed by our team before funds are released.
-            </CardDescription>
+            <CardTitle>Withdrawal history</CardTitle>
+            <CardDescription>Your past and pending withdrawal requests.</CardDescription>
           </CardHeader>
-          <CardContent>
-            {wallet && wallet.status !== "ACTIVE" && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>
-                  Your wallet is {wallet.status.toLowerCase()}. Withdrawals are unavailable
-                  until it&apos;s active again.
-                </AlertDescription>
-              </Alert>
+          <CardContent className="flex flex-col gap-3 px-0 pt-0">
+            {history.isLoading && (
+              <div className="flex flex-col gap-2 px-5">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-14 w-full" />
+                ))}
+              </div>
             )}
 
-            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-              {wallet && (
-                <div className="flex items-center justify-between rounded-xl bg-muted px-3.5 py-2.5 text-sm">
-                  <span className="text-muted-foreground">Available balance</span>
-                  <span className="font-medium text-foreground">{formatInr(wallet.available)}</span>
-                </div>
-              )}
-
-              <Field>
-                <FieldLabel htmlFor="amount">Amount (INR)</FieldLabel>
-                <Input
-                  id="amount"
-                  type="number"
-                  min={limits?.withdrawal.minAmount ?? 1}
-                  max={limits?.withdrawal.maxAmount}
-                  step="0.01"
-                  autoFocus
-                  placeholder="e.g. 500"
-                  value={amountInput}
-                  onChange={(e) => setAmountInput(e.target.value)}
-                  disabled={wallet ? wallet.status !== "ACTIVE" : false}
-                />
-                {limits && (
-                  <p className="text-xs text-muted-foreground">
-                    Min {formatInr(limits.withdrawal.minAmount)} · Max{" "}
-                    {formatInr(limits.withdrawal.maxAmount)} per request
-                  </p>
-                )}
-                <FieldError>{formError}</FieldError>
-              </Field>
-
-              <Button
-                type="submit"
-                size="lg"
-                isLoading={withdrawMutation.isPending}
-                disabled={wallet ? wallet.status !== "ACTIVE" : false}
-              >
-                Request withdrawal
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {result && (
-        <Card className="w-full sm:max-w-md">
-          <CardHeader>
-            <CardTitle>Withdrawal requested</CardTitle>
-            <CardDescription>
-              Your request is pending review. We&apos;ll release funds once it&apos;s
-              processed by our team &mdash; this is not instant.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Amount</span>
-              <span className="font-semibold text-foreground">{formatInr(result.amount)}</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-muted-foreground">Status</span>
-              <StatusPill tone={withdrawalStatusTone(result.status)}>{result.status}</StatusPill>
-            </div>
-
-            <Button variant="outline" className="mt-2" onClick={startNew}>
-              Request another withdrawal
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Withdrawal history</CardTitle>
-          <CardDescription>Your past and pending withdrawal requests.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 px-0 pt-0">
-          {history.isLoading && (
-            <div className="flex flex-col gap-2 px-(--card-spacing)">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <Skeleton key={i} className="h-14 w-full" />
-              ))}
-            </div>
-          )}
-
-          {history.isError && (
-            <div className="px-(--card-spacing)">
-              <Alert variant="destructive">
-                <AlertDescription>
-                  {getApiErrorMessage(history.error, "Failed to load withdrawal history")}
-                </AlertDescription>
-              </Alert>
-            </div>
-          )}
-
-          {!history.isLoading && !history.isError && items.length === 0 && (
-            <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
-              <Landmark className="size-7 text-muted-foreground" />
-              <p className="text-sm font-medium text-foreground">No withdrawals yet</p>
-              <p className="text-sm text-muted-foreground">
-                Requests you submit will show up here with their status.
-              </p>
-            </div>
-          )}
-
-          {items.map((withdrawal) => (
-            <button
-              key={withdrawal.id}
-              type="button"
-              onClick={() => setSelectedId(withdrawal.id)}
-              className="flex items-center justify-between gap-3 px-(--card-spacing) py-2.5 text-left transition-colors hover:bg-muted"
-            >
-              <div className="flex flex-col gap-0.5">
-                <p className="text-sm font-medium text-foreground">{formatInr(withdrawal.amount)}</p>
-                <p className="text-xs text-muted-foreground">{formatDate(withdrawal.createdAt)}</p>
+            {history.isError && (
+              <div className="px-5">
+                <Alert variant="destructive">
+                  <AlertDescription>
+                    {getApiErrorMessage(history.error, "Failed to load withdrawal history")}
+                  </AlertDescription>
+                </Alert>
               </div>
-              <StatusPill tone={withdrawalStatusTone(withdrawal.status)}>
-                {withdrawal.status}
-              </StatusPill>
-            </button>
-          ))}
+            )}
 
-          {meta && meta.totalItems > 0 && (
-            <div className="px-(--card-spacing)">
-              <Pagination
-                page={meta.page}
-                totalPages={meta.totalPages}
-                hasNextPage={meta.hasNextPage}
-                hasPreviousPage={meta.hasPreviousPage}
-                onPageChange={setPage}
-                disabled={history.isFetching}
-              />
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            {!history.isLoading && !history.isError && items.length === 0 && (
+              <div className="flex flex-col items-center gap-2 px-6 py-12 text-center">
+                <Landmark className="size-7 text-muted-foreground" />
+                <p className="text-sm font-medium text-foreground">No withdrawals yet</p>
+                <p className="text-sm text-muted-foreground">
+                  Requests you submit will show up here with their status.
+                </p>
+              </div>
+            )}
+
+            {!history.isLoading && items.length > 0 && (
+              <>
+                {/* Desktop/tablet: table */}
+                <div className="hidden px-5 sm:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">SN</TableHead>
+                        <TableHead>Amount</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead>Requested</TableHead>
+                        <TableHead>Processed</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {items.map((withdrawal, index) => (
+                        <TableRow
+                          key={withdrawal.id}
+                          className="cursor-pointer"
+                          onClick={() => setSelectedId(withdrawal.id)}
+                        >
+                          <TableCell className="text-muted-foreground">
+                            {computeSerial(page, PAGE_SIZE, index)}
+                          </TableCell>
+                          <TableCell className="font-mono font-medium text-foreground">
+                            {formatInr(withdrawal.amount)}
+                          </TableCell>
+                          <TableCell>
+                            <StatusPill tone={withdrawalStatusTone(withdrawal.status)}>
+                              {withdrawal.status}
+                            </StatusPill>
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {formatDate(withdrawal.createdAt)}
+                          </TableCell>
+                          <TableCell className="whitespace-nowrap text-muted-foreground">
+                            {withdrawal.processedAt ? formatDate(withdrawal.processedAt) : "—"}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+
+                {/* Mobile: compact icon-forward cards */}
+                <div className="flex flex-col gap-1 px-2 sm:hidden">
+                  {items.map((withdrawal) => (
+                    <button
+                      key={withdrawal.id}
+                      type="button"
+                      onClick={() => setSelectedId(withdrawal.id)}
+                      className="flex w-full items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-muted"
+                    >
+                      <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-amber-500/10 text-amber-400">
+                        <ArrowUpFromLine className="size-4.5" />
+                      </span>
+                      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                        <p className="font-mono text-sm font-medium text-foreground">
+                          {formatInr(withdrawal.amount)}
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {formatDate(withdrawal.createdAt)}
+                        </p>
+                      </div>
+                      <StatusPill tone={withdrawalStatusTone(withdrawal.status)}>
+                        {withdrawal.status}
+                      </StatusPill>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {meta && meta.totalPages > 1 && (
+              <div className="px-5">
+                <Pagination
+                  page={meta.page}
+                  totalPages={meta.totalPages}
+                  hasNextPage={meta.hasNextPage}
+                  hasPreviousPage={meta.hasPreviousPage}
+                  onPageChange={setPage}
+                  disabled={history.isFetching}
+                />
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
 
       <WithdrawalDetailDialog
         withdrawalId={selectedId}

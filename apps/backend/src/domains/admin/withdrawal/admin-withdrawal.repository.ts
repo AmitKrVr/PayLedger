@@ -1,6 +1,7 @@
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 
 import {
+    admins,
     db,
     transactions,
     users,
@@ -13,21 +14,45 @@ import {
     type DatabaseOrTransaction,
 } from '@payledger/database';
 
-export const findWithdrawals = async (
-    filters: {
-        status?: WithdrawalStatus;
-        page: number;
-        limit: number;
-    },
-    executor: DatabaseOrTransaction = db,
-) => {
-    const whereClause = filters.status
-        ? eq(withdrawals.status, filters.status)
-        : undefined;
+export type ListWithdrawalsFilters = {
+    search?: string;
+    status?: WithdrawalStatus;
+    page: number;
+    limit: number;
+};
 
-    return executor
+const buildWithdrawalConditions = (filters: {
+    search?: string;
+    status?: WithdrawalStatus;
+}) => {
+    const conditions = [];
+
+    if (filters.search) {
+        const term = `%${filters.search}%`;
+        conditions.push(
+            or(
+                ilike(transactions.referenceId, term),
+                ilike(users.name, term),
+                ilike(users.mobile, term),
+            ),
+        );
+    }
+
+    if (filters.status) {
+        conditions.push(eq(withdrawals.status, filters.status));
+    }
+
+    return conditions.length > 0 ? and(...conditions) : undefined;
+};
+
+export const findWithdrawals = async (
+    filters: ListWithdrawalsFilters,
+    executor: DatabaseOrTransaction = db,
+) =>
+    executor
         .select({
             id: withdrawals.id,
+            referenceId: transactions.referenceId,
             amountPaise: withdrawals.amountPaise,
             status: withdrawals.status,
             requestedAt: withdrawals.requestedAt,
@@ -39,24 +64,23 @@ export const findWithdrawals = async (
         .from(withdrawals)
         .innerJoin(wallets, eq(withdrawals.walletId, wallets.id))
         .innerJoin(users, eq(wallets.userId, users.id))
-        .where(whereClause)
+        .leftJoin(transactions, eq(withdrawals.transactionId, transactions.id))
+        .where(buildWithdrawalConditions(filters))
         .orderBy(desc(withdrawals.requestedAt))
         .limit(filters.limit)
         .offset((filters.page - 1) * filters.limit);
-};
 
 export const countWithdrawals = async (
-    filters: { status?: WithdrawalStatus },
+    filters: { search?: string; status?: WithdrawalStatus },
     executor: DatabaseOrTransaction = db,
 ): Promise<number> => {
-    const whereClause = filters.status
-        ? eq(withdrawals.status, filters.status)
-        : undefined;
-
     const [row] = await executor
         .select({ count: sql<number>`count(*)::int` })
         .from(withdrawals)
-        .where(whereClause);
+        .innerJoin(wallets, eq(withdrawals.walletId, wallets.id))
+        .innerJoin(users, eq(wallets.userId, users.id))
+        .leftJoin(transactions, eq(withdrawals.transactionId, transactions.id))
+        .where(buildWithdrawalConditions(filters));
 
     return row?.count ?? 0;
 };
@@ -68,12 +92,13 @@ export const findWithdrawalByIdWithUser = async (
     const [row] = await executor
         .select({
             id: withdrawals.id,
+            referenceId: transactions.referenceId,
             amountPaise: withdrawals.amountPaise,
             status: withdrawals.status,
             requestedAt: withdrawals.requestedAt,
             processedAt: withdrawals.processedAt,
             rejectionReason: withdrawals.rejectionReason,
-            processedByAdminId: withdrawals.processedByAdminId,
+            processedByAdminName: admins.name,
             userId: users.id,
             userName: users.name,
             userMobile: users.mobile,
@@ -81,6 +106,8 @@ export const findWithdrawalByIdWithUser = async (
         .from(withdrawals)
         .innerJoin(wallets, eq(withdrawals.walletId, wallets.id))
         .innerJoin(users, eq(wallets.userId, users.id))
+        .leftJoin(transactions, eq(withdrawals.transactionId, transactions.id))
+        .leftJoin(admins, eq(withdrawals.processedByAdminId, admins.id))
         .where(eq(withdrawals.id, id))
         .limit(1);
 

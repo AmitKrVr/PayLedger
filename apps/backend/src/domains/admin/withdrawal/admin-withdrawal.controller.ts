@@ -26,12 +26,13 @@ export const listWithdrawalsController: RequestHandler = async (
     next,
 ) => {
     try {
-        const { page, limit, status } =
+        const { page, limit, search, status } =
             req.validatedQuery as ListWithdrawalsQuery;
 
         const { items, totalItems } = await listWithdrawals({
             page,
             limit,
+            search,
             status,
         });
 

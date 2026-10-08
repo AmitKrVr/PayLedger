@@ -49,80 +49,82 @@ export function TransactionDetailDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {isLoading && (
-          <div className="flex flex-col gap-3">
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-full" />
-            <Skeleton className="h-5 w-2/3" />
-          </div>
-        )}
-
-        {isError && (
-          <Alert variant="destructive">
-            <AlertDescription>
-              {getApiErrorMessage(error, "Failed to load transaction")}
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {txn && (
-          <div className="flex flex-col gap-3 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Type</span>
-              <span className="font-medium text-foreground">
-                {TYPE_LABEL[txn.type] ?? txn.type}
-              </span>
+        <div className="flex min-h-48 flex-col">
+          {isLoading && (
+            <div className="flex flex-col gap-3">
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-full" />
+              <Skeleton className="h-5 w-2/3" />
             </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Amount</span>
-              <span
-                className={
-                  txn.direction === "CREDIT"
-                    ? "font-semibold text-success"
-                    : "font-semibold text-foreground"
-                }
-              >
-                {txn.direction === "CREDIT" ? "+" : "−"}
-                {formatInr(txn.amount)}
-              </span>
-            </div>
-            {txn.counterparty && (
+          )}
+
+          {isError && (
+            <Alert variant="destructive">
+              <AlertDescription>
+                {getApiErrorMessage(error, "Failed to load transaction")}
+              </AlertDescription>
+            </Alert>
+          )}
+
+          {txn && (
+            <div className="flex flex-col gap-3 text-sm">
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">
-                  {txn.direction === "DEBIT" ? "To" : "From"}
+                <span className="text-muted-foreground">Type</span>
+                <span className="font-medium text-foreground">
+                  {TYPE_LABEL[txn.type] ?? txn.type}
                 </span>
-                <span className="font-medium text-foreground">{txn.counterparty.name}</span>
               </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Status</span>
-              <StatusPill tone={transactionStatusTone(txn.status)}>{txn.status}</StatusPill>
-            </div>
-
-            <Separator />
-
-            {txn.description && (
-              <div className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground">Description</span>
-                <span className="text-foreground">{txn.description}</span>
-              </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Created</span>
-              <span className="text-foreground">{formatDateTime(txn.createdAt)}</span>
-            </div>
-            {txn.completedAt && (
               <div className="flex items-center justify-between">
-                <span className="text-muted-foreground">Completed</span>
-                <span className="text-foreground">{formatDateTime(txn.completedAt)}</span>
+                <span className="text-muted-foreground">Amount</span>
+                <span
+                  className={
+                    txn.direction === "CREDIT"
+                      ? "font-mono font-semibold text-success"
+                      : "font-mono font-semibold text-foreground"
+                  }
+                >
+                  {txn.direction === "CREDIT" ? "+" : "−"}
+                  {formatInr(txn.amount)}
+                </span>
               </div>
-            )}
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Reference ID</span>
-              <span className="font-mono text-xs text-foreground">{txn.referenceId}</span>
+              {txn.counterparty && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">
+                    {txn.direction === "DEBIT" ? "To" : "From"}
+                  </span>
+                  <span className="font-medium text-foreground">{txn.counterparty.name}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Status</span>
+                <StatusPill tone={transactionStatusTone(txn.status)}>{txn.status}</StatusPill>
+              </div>
+
+              <Separator />
+
+              {txn.description && (
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-muted-foreground">Description</span>
+                  <span className="text-foreground">{txn.description}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Created</span>
+                <span className="text-foreground">{formatDateTime(txn.createdAt)}</span>
+              </div>
+              {txn.completedAt && (
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Completed</span>
+                  <span className="text-foreground">{formatDateTime(txn.completedAt)}</span>
+                </div>
+              )}
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">Reference ID</span>
+                <span className="font-mono text-xs text-foreground">{txn.referenceId}</span>
+              </div>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   )

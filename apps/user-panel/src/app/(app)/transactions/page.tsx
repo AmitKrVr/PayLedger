@@ -3,6 +3,7 @@
 import * as React from "react"
 import { Receipt } from "lucide-react"
 
+import { PageHeader } from "@/components/page-header"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -24,6 +25,7 @@ import { useTransactionsQuery } from "@/hooks/use-transactions"
 import { getApiErrorMessage } from "@/lib/api/error-message"
 import type { TransactionStatus, TransactionType } from "@/lib/api/transactions"
 import { formatInr } from "@/lib/money"
+import { computeSerial } from "@/lib/pagination"
 import { transactionStatusTone } from "@/lib/status"
 
 const PAGE_SIZE = 20
@@ -75,7 +77,12 @@ export default function TransactionsPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <h1 className="text-2xl font-semibold text-foreground">Transactions</h1>
+      <PageHeader
+        icon={Receipt}
+        title="Transactions"
+        description="Every deposit, transfer, and withdrawal on your account."
+        tint="slate"
+      />
 
       <Card>
         <CardContent className="flex flex-col gap-4 pt-5">
@@ -190,6 +197,7 @@ export default function TransactionsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">SN</TableHead>
                   <TableHead>Type</TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>Status</TableHead>
@@ -197,12 +205,15 @@ export default function TransactionsPage() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {items.map((txn) => (
+                {items.map((txn, index) => (
                   <TableRow
                     key={txn.id}
                     className="cursor-pointer"
                     onClick={() => setSelectedId(txn.id)}
                   >
+                    <TableCell className="text-muted-foreground">
+                      {computeSerial(page, PAGE_SIZE, index)}
+                    </TableCell>
                     <TableCell>
                       <p className="font-medium text-foreground">{txn.type.replace("_", " ")}</p>
                       {txn.counterparty && (
@@ -220,8 +231,8 @@ export default function TransactionsPage() {
                     <TableCell
                       className={
                         txn.direction === "CREDIT"
-                          ? "text-right font-semibold text-success"
-                          : "text-right font-semibold text-foreground"
+                          ? "text-right font-mono font-medium text-success"
+                          : "text-right font-mono font-medium text-foreground"
                       }
                     >
                       {txn.direction === "CREDIT" ? "+" : "−"}
@@ -242,7 +253,7 @@ export default function TransactionsPage() {
         </>
       )}
 
-      {meta && meta.totalItems > 0 && (
+      {meta && meta.totalPages > 1 && (
         <Pagination
           page={meta.page}
           totalPages={meta.totalPages}

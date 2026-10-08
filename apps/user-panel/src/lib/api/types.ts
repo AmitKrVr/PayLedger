@@ -9,11 +9,15 @@ export interface ApiSuccess<T> {
 }
 
 /** The backend's error envelope (middleware/error.middleware.ts) -- `code`
- * is what callers should branch on, `message` is what to show a human. */
+ * is what callers should branch on, `message` is what to show a human.
+ * `errors` is only present on VALIDATION_ERROR responses and carries the
+ * actual per-field reason -- `message` alone is just the generic
+ * "Validation failed". */
 export interface ApiErrorBody {
   success: false
   code: string
   message: string
+  errors?: { field: string; message: string }[]
   requestId: string
 }
 

@@ -1,12 +1,36 @@
 import { Router } from 'express';
 
 import { requireAdminAuth } from '../../../middleware/auth.middleware.js';
-import { validateParams } from '../../../middleware/validation.middleware.js';
+import {
+    validateParams,
+    validateQuery,
+} from '../../../middleware/validation.middleware.js';
 
-import { reverseTransferController } from './admin-transfer.controller.js';
-import { transferIdParamsSchema } from './admin-transfer.validator.js';
+import {
+    getTransferController,
+    listTransfersController,
+    reverseTransferController,
+} from './admin-transfer.controller.js';
+import {
+    listTransfersQuerySchema,
+    transferIdParamsSchema,
+} from './admin-transfer.validator.js';
 
 const router = Router();
+
+router.get(
+    '/',
+    requireAdminAuth,
+    validateQuery(listTransfersQuerySchema),
+    listTransfersController,
+);
+
+router.get(
+    '/:id',
+    requireAdminAuth,
+    validateParams(transferIdParamsSchema),
+    getTransferController,
+);
 
 router.post(
     '/:id/reverse',

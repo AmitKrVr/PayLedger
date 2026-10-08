@@ -5,6 +5,7 @@ import { generateBusinessId } from '@payledger/shared';
 import { ERROR_CODES } from '../../constants/response.constants.js';
 import { ERROR_MESSAGES } from '../../constants/message.constants.js';
 import { inrToPaise, paiseToInr } from '../../lib/money.js';
+import { logger } from '../../lib/logger.js';
 import {
     BusinessRuleError,
     NotFoundError,
@@ -18,11 +19,13 @@ import { creditWallet } from '../wallet/wallet.operations.js';
 import { findWalletByUserId } from '../wallet/wallet.repository.js';
 
 import {
+    countPaymentsForUser,
     createDepositTransaction,
     createPayment as createPaymentRecord,
     findPaymentByIdForUser,
     findPaymentByOrderIdForUpdate,
     findPaymentByUserAndIdempotencyKey,
+    findPaymentsForUser,
     updatePaymentGatewayInfo,
     updatePaymentStatus,
     updatePaymentSuccess,
@@ -31,6 +34,7 @@ import {
     idempotencyKeyHeaderSchema,
     webhookPayloadSchema,
     type CreatePaymentInput,
+    type ListPaymentsQuery,
     type SimulatePaymentInput,
 } from './payment.validator.js';
 
@@ -42,6 +46,8 @@ type PaymentResponse = {
     orderId: string;
     amount: number;
     status: PaymentStatus;
+    failureReason: string | null;
+    createdAt: Date;
     expiresAt: Date | null;
 };
 
@@ -52,6 +58,8 @@ const toPaymentResponse = (
     orderId: payment.orderId,
     amount: paiseToInr(payment.amountPaise),
     status: payment.status,
+    failureReason: payment.failureReason,
+    createdAt: payment.createdAt,
     expiresAt: payment.expiresAt,
 });
 
@@ -84,7 +92,7 @@ export const createPayment = async (
     }
 
     const amountPaise = inrToPaise(input.amount);
-    const orderId = generateBusinessId();
+    const orderId = `ORD${generateBusinessId()}`;
 
     const expiresAt = new Date(
         Date.now() + env.PAYMENT_EXPIRY_MINUTES * 60 * 1000,
@@ -152,6 +160,21 @@ export const createPayment = async (
 
         throw error;
     }
+};
+
+export const listPayments = async (
+    userId: string,
+    filters: Pick<ListPaymentsQuery, 'page' | 'limit' | 'status'>,
+): Promise<{ items: PaymentResponse[]; totalItems: number }> => {
+    const [rows, totalItems] = await Promise.all([
+        findPaymentsForUser(userId, filters),
+        countPaymentsForUser(userId, { status: filters.status }),
+    ]);
+
+    return {
+        items: rows.map(toPaymentResponse),
+        totalItems,
+    };
 };
 
 export const getPayment = async (
@@ -232,6 +255,16 @@ export const processPaymentWebhook = async (
 ): Promise<void> => {
     const payload = webhookPayloadSchema.parse(rawBody);
 
+    logger.info(
+        {
+            orderId: payload.orderId,
+            paymentId: payload.paymentId,
+            status: payload.status,
+            amountPaise: payload.amount,
+        },
+        'Payment webhook payload validated, starting processing',
+    );
+
     await db.transaction(async (tx) => {
         const payment = await findPaymentByOrderIdForUpdate(
             payload.orderId,
@@ -239,6 +272,11 @@ export const processPaymentWebhook = async (
         );
 
         if (!payment) {
+            logger.warn(
+                { orderId: payload.orderId },
+                'Payment webhook: no payment found for orderId',
+            );
+
             throw new NotFoundError(
                 ERROR_MESSAGES.PAYMENT_NOT_FOUND,
                 ERROR_CODES.PAYMENT_NOT_FOUND,
@@ -246,6 +284,16 @@ export const processPaymentWebhook = async (
         }
 
         if (payment.provider !== PAYMENT_PROVIDER) {
+            logger.warn(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    expectedProvider: PAYMENT_PROVIDER,
+                    actualProvider: payment.provider,
+                },
+                'Payment webhook: provider mismatch',
+            );
+
             throw new BusinessRuleError(
                 ERROR_MESSAGES.PAYMENT_PROVIDER_MISMATCH,
                 ERROR_CODES.PAYMENT_PROVIDER_MISMATCH,
@@ -261,6 +309,15 @@ export const processPaymentWebhook = async (
             payment.status !== PaymentStatus.CREATED &&
             payment.status !== PaymentStatus.PROCESSING
         ) {
+            logger.info(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    currentStatus: payment.status,
+                },
+                'Payment webhook: already in a terminal state, ignoring as a duplicate delivery',
+            );
+
             return;
         }
 
@@ -268,6 +325,15 @@ export const processPaymentWebhook = async (
             payment.expiresAt !== null && payment.expiresAt <= new Date();
 
         if (isExpired) {
+            logger.info(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    expiresAt: payment.expiresAt,
+                },
+                'Payment webhook: payment expired before this webhook arrived, marking EXPIRED',
+            );
+
             await updatePaymentStatus(
                 payment.id,
                 {
@@ -285,6 +351,16 @@ export const processPaymentWebhook = async (
         const webhookAmountPaise = BigInt(payload.amount);
 
         if (webhookAmountPaise !== payment.amountPaise) {
+            logger.warn(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    expectedAmountPaise: payment.amountPaise.toString(),
+                    receivedAmountPaise: webhookAmountPaise.toString(),
+                },
+                'Payment webhook: amount mismatch',
+            );
+
             throw new BusinessRuleError(
                 ERROR_MESSAGES.PAYMENT_AMOUNT_MISMATCH,
                 ERROR_CODES.PAYMENT_AMOUNT_MISMATCH,
@@ -292,6 +368,15 @@ export const processPaymentWebhook = async (
         }
 
         if (payload.status === 'FAILED') {
+            logger.info(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    failureReason: payload.failureReason,
+                },
+                'Payment webhook: gateway reported FAILED, marking payment FAILED',
+            );
+
             await updatePaymentStatus(
                 payment.id,
                 {
@@ -309,6 +394,15 @@ export const processPaymentWebhook = async (
         const wallet = await findWalletByUserId(payment.userId, tx);
 
         if (!wallet) {
+            logger.warn(
+                {
+                    orderId: payload.orderId,
+                    paymentRowId: payment.id,
+                    userId: payment.userId,
+                },
+                'Payment webhook: no wallet found for this user, cannot credit',
+            );
+
             throw new NotFoundError(
                 ERROR_MESSAGES.WALLET_NOT_FOUND,
                 ERROR_CODES.WALLET_NOT_FOUND,
@@ -323,6 +417,18 @@ export const processPaymentWebhook = async (
                 description: `Wallet deposit via ${payment.provider}`,
             },
             tx,
+        );
+
+        logger.info(
+            {
+                orderId: payload.orderId,
+                paymentRowId: payment.id,
+                walletId: wallet.id,
+                userId: payment.userId,
+                amountPaise: payment.amountPaise.toString(),
+                transactionId: transaction.id,
+            },
+            'Payment webhook: SUCCESS, crediting wallet',
         );
 
         // Wallet eligibility (blocked/missing) is enforced inside
@@ -340,6 +446,15 @@ export const processPaymentWebhook = async (
             payment.id,
             { paymentId: payload.paymentId },
             tx,
+        );
+
+        logger.info(
+            {
+                orderId: payload.orderId,
+                paymentRowId: payment.id,
+                transactionId: transaction.id,
+            },
+            'Payment webhook: processing complete, payment marked SUCCESS',
         );
     });
 };

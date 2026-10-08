@@ -35,6 +35,7 @@ type AuditContext = {
 
 type WithdrawalUserRow = {
     id: string;
+    referenceId: string | null;
     amountPaise: bigint;
     status: WithdrawalStatus;
     requestedAt: Date;
@@ -46,6 +47,7 @@ type WithdrawalUserRow = {
 
 type WithdrawalListItem = {
     id: string;
+    reference: string | null;
     user: { id: string; name: string; mobile: string };
     amount: number;
     status: WithdrawalStatus;
@@ -55,11 +57,12 @@ type WithdrawalListItem = {
 
 type WithdrawalDetail = WithdrawalListItem & {
     rejectionReason: string | null;
-    processedByAdminId: string | null;
+    processedByAdminName: string | null;
 };
 
 const toListItem = (row: WithdrawalUserRow): WithdrawalListItem => ({
     id: row.id,
+    reference: row.referenceId,
     user: {
         id: row.userId,
         name: row.userName,
@@ -72,13 +75,14 @@ const toListItem = (row: WithdrawalUserRow): WithdrawalListItem => ({
 });
 
 export const listWithdrawals = async (filters: {
+    search?: string;
     status?: WithdrawalStatus;
     page: number;
     limit: number;
 }): Promise<{ items: WithdrawalListItem[]; totalItems: number }> => {
     const [rows, totalItems] = await Promise.all([
         findWithdrawals(filters),
-        countWithdrawals({ status: filters.status }),
+        countWithdrawals({ search: filters.search, status: filters.status }),
     ]);
 
     return {
@@ -99,7 +103,7 @@ export const getWithdrawal = async (
     return {
         ...toListItem(row),
         rejectionReason: row.rejectionReason,
-        processedByAdminId: row.processedByAdminId,
+        processedByAdminName: row.processedByAdminName,
     };
 };
 

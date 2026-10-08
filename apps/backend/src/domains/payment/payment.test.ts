@@ -311,6 +311,99 @@ describe('Payment domain', () => {
         });
     });
 
+    describe('GET /api/v1/payments', () => {
+        it('lists only the authenticated user\'s own payments', async () => {
+            const owner = await createTestUser();
+            const other = await createTestUser();
+
+            await createPaymentFor(owner.cookie, 500);
+            await createPaymentFor(other.cookie, 700);
+
+            const res = await request(app)
+                .get('/api/v1/payments')
+                .set('Cookie', owner.cookie);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveLength(1);
+            expect(res.body.data[0].amount).toBe(500);
+        });
+
+        it('includes a FAILED payment -- the whole point of this endpoint is that a failed deposit is not silently invisible just because it never became a transaction', async () => {
+            const user = await createTestUser();
+            const created = await createPaymentFor(user.cookie, 500);
+
+            const webhookRes = await postWebhook({
+                orderId: created.body.data.orderId,
+                paymentId: randomUUID(),
+                status: 'FAILED',
+                amount: Number(inrToPaise(500)),
+                failureReason: 'Card declined',
+            });
+            expect(webhookRes.status).toBe(200);
+
+            const res = await request(app)
+                .get('/api/v1/payments')
+                .set('Cookie', user.cookie);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveLength(1);
+            expect(res.body.data[0]).toMatchObject({
+                id: created.body.data.id,
+                status: 'FAILED',
+                failureReason: 'Card declined',
+            });
+        });
+
+        it('filters by status', async () => {
+            const user = await createTestUser();
+            const toFail = await createPaymentFor(user.cookie, 500);
+            await createPaymentFor(user.cookie, 600);
+
+            await postWebhook({
+                orderId: toFail.body.data.orderId,
+                paymentId: randomUUID(),
+                status: 'FAILED',
+                amount: Number(inrToPaise(500)),
+            });
+
+            const res = await request(app)
+                .get('/api/v1/payments?status=FAILED')
+                .set('Cookie', user.cookie);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveLength(1);
+            expect(res.body.data[0].status).toBe('FAILED');
+        });
+
+        it('paginates results', async () => {
+            const user = await createTestUser();
+
+            for (let i = 0; i < 3; i++) {
+                await createPaymentFor(user.cookie, 500 + i);
+            }
+
+            const res = await request(app)
+                .get('/api/v1/payments?page=1&limit=2')
+                .set('Cookie', user.cookie);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveLength(2);
+            expect(res.body.meta).toMatchObject({
+                page: 1,
+                limit: 2,
+                totalItems: 3,
+                totalPages: 2,
+                hasNextPage: true,
+            });
+        });
+
+        it('rejects an unauthenticated request', async () => {
+            const res = await request(app).get('/api/v1/payments');
+
+            expect(res.status).toBe(401);
+        });
+    });
+
     describe('GET /api/v1/payments/:id', () => {
         it('rejects access to another user\'s payment', async () => {
             const owner = await createTestUser();

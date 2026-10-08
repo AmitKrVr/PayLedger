@@ -1,55 +1,54 @@
 # PayLedger VPS Operations & Deployment Runbook
 
-**Project:** PayLedger\
-**Environment:** Production\
-**Provider:** Hetzner\
-**Last documented:** 8 October 2026
+**Project:** PayLedger
+**Environment:** Production
+**Provider:** DigitalOcean
+**Last documented:** 9 October 2026
 
-------------------------------------------------------------------------
+---
 
 ## 1. Purpose
 
-This document is the operational reference for the PayLedger production
-VPS.
+This document is the operational reference for the PayLedger production VPS.
 
 It covers:
 
--   Server architecture
--   SSH access
--   Application directory
--   PostgreSQL
--   Redis
--   Node.js and pnpm
--   GitHub access
--   Production environment variables
--   systemd services
--   Nginx
--   DNS
--   HTTPS / Certbot
--   Standard deployment
--   Environment changes
--   Admin bootstrap
--   Logs
--   Troubleshooting
--   Reboot and recovery
--   Final production verification
+- Server architecture
+- SSH access
+- Application directory
+- PostgreSQL
+- Redis
+- Node.js and pnpm
+- GitHub access
+- Production environment variables
+- systemd services
+- Nginx
+- DNS
+- HTTPS / Certbot
+- Standard deployment
+- Environment changes
+- Admin bootstrap
+- Logs
+- Troubleshooting
+- Reboot and recovery
+- Final production verification
 
 ### Secret safety
 
 Never store the following in this document or Git:
 
--   Database passwords
--   JWT secrets
--   Payment webhook secrets
--   API keys
--   Private SSH keys
--   Other production credentials
+- Database passwords
+- JWT secrets
+- Payment webhook secrets
+- API keys
+- Private SSH keys
+- Other production credentials
 
-------------------------------------------------------------------------
+---
 
-# 2. Production Architecture
+## 2. Production Architecture
 
-``` text
+```text
 Internet
    |
    v
@@ -60,19 +59,19 @@ Nginx :80 / :443
    v              v               v
 User Panel     Admin Panel      Backend API
 :3000          :3001            :5001
-                                   |
-                                   +------> PostgreSQL :5432
-                                   |
-                                   +------> Redis :6379
-                                   |
-                                   v
-                              Payment Gateway
-                                  :5002
+                                  |
+                                  +------> PostgreSQL :5432
+                                  |
+                                  +------> Redis :6379
+                                  |
+                                  v
+                             Payment Gateway
+                                 :5002
 ```
 
 Public domains:
 
-``` text
+```text
 https://payledger.devamit.info
 https://payledger-admin.devamit.info
 https://payledger-api.devamit.info
@@ -81,7 +80,7 @@ https://payledger-gateway.devamit.info
 
 Internal services:
 
-``` text
+```text
 127.0.0.1:5432  PostgreSQL
 127.0.0.1:6379  Redis
 127.0.0.1:3000  User Panel
@@ -92,64 +91,103 @@ Internal services:
 
 Nginx is the public entry point.
 
-------------------------------------------------------------------------
+---
 
-# 3. Server Reference
+## 3. Server Reference
 
-  Item                     Value
-  ------------------------ --------------------
-  Provider                 Hetzner
-  Public IPv4              `200.141.5.212`
-  OS                       Ubuntu 24.04.4 LTS
-  Linux application user   `devamit`
-  Application directory    `/opt/payledger`
-  SSH user                 `devamit`
+| Item | Value |
+|---|---|
+| Provider | DigitalOcean |
+| Public IPv4 | `168.144.210.205` |
+| OS | Ubuntu 24.04.5 LTS |
+| Linux application user | `root` |
+| Application directory | `/root/PayLedger` |
+| SSH user | `root` |
 
 The application runs from:
 
-``` text
-/opt/payledger
+```text
+/root/PayLedger
 ```
 
-------------------------------------------------------------------------
+---
 
-# 4. SSH
+## 4. SSH
 
-SSH connection:
+The VPS is accessed as `root` using a dedicated SSH key from the Mac.
 
-``` bash
-ssh -i ~/.ssh/canten_vps_ed25519 devamit@200.141.5.212
+Preferred command:
+
+```bash
+ssh payledger-vps
 ```
 
-The VPS currently permits root SSH login. Do not change the SSH
-root-login configuration as part of normal PayLedger deployment
-operations.
+Direct-IP command (also configured on the Mac to use the same key):
 
-After connecting:
+```bash
+ssh root@168.144.210.205
+```
 
-``` bash
-cd /opt/payledger
+Mac SSH configuration (`~/.ssh/config`):
+
+```sshconfig
+Host payledger-vps
+    HostName 168.144.210.205
+    User root
+    IdentityFile ~/.ssh/payledger_vps
+    IdentitiesOnly yes
+
+Host 168.144.210.205
+    User root
+    IdentityFile ~/.ssh/payledger_vps
+    IdentitiesOnly yes
+```
+
+The private key is stored on the Mac at `~/.ssh/payledger_vps`.
+Never copy the private key into the VPS or share it. The corresponding public key is authorized for root SSH access on the VPS.
+
+Effective SSH authentication settings:
+
+```text
+PubkeyAuthentication yes
+PasswordAuthentication no
+```
+
+The active password-authentication setting is configured in `/etc/ssh/sshd_config.d/50-cloud-init.conf`; `/etc/ssh/sshd_config.d/99-payledger-auth.conf` also records `PasswordAuthentication no` and `PubkeyAuthentication yes`. Verify the effective values with `sshd -T` after any SSH configuration change.
+
+Check them on the VPS:
+
+```bash
+sshd -T | grep -E '^(passwordauthentication|pubkeyauthentication) '
+```
+
+Keep an existing SSH session open while changing SSH configuration. Validate changes with `sshd -t`, reload with `systemctl reload ssh`, and test a new connection before closing the existing session.
+
+After connecting, the application directory is:
+
+```bash
+cd /root/PayLedger
 ```
 
 Closing SSH does not stop the production services.
 
-``` bash
+```bash
 exit
 ```
 
-------------------------------------------------------------------------
+---
 
-# 5. Ports
+## 5. Ports
 
 Check all listeners:
 
-``` bash
+```bash
 sudo ss -lntp
 ```
 
 Expected PayLedger application ports:
 
-``` text
+```text
 :22       SSH
 :80       Nginx HTTP
 :443      Nginx HTTPS
@@ -165,32 +203,32 @@ PostgreSQL and Redis should remain local services.
 
 Nginx is the public reverse proxy.
 
-------------------------------------------------------------------------
+---
 
-# 6. PostgreSQL
+## 6. PostgreSQL
 
 Installed PostgreSQL version:
 
-``` bash
+```bash
 sudo -u postgres psql -c "SELECT version();"
 ```
 
 Current database:
 
-``` text
+```text
 payledger
 ```
 
 Application database user:
 
-``` text
+```text
 payledger
 ```
 
 Database connection is configured through:
 
-``` text
-/opt/payledger/.env
+```text
+/root/PayLedger/.env
 ```
 
 Never put the production database password into this document.
@@ -199,28 +237,27 @@ Never put the production database password into this document.
 
 Check:
 
-``` bash
+```bash
 sudo systemctl status postgresql --no-pager
 ```
 
-The Ubuntu PostgreSQL cluster wrapper can show `active (exited)` even
-when PostgreSQL itself is running.
+The Ubuntu PostgreSQL cluster wrapper can show `active (exited)` even when PostgreSQL itself is running.
 
 Confirm the listener:
 
-``` bash
+```bash
 sudo ss -lntp | grep 5432
 ```
 
 ### PostgreSQL administrator shell
 
-``` bash
+```bash
 sudo -u postgres psql
 ```
 
 Useful commands:
 
-``` sql
+```sql
 \l
 \du
 \dt
@@ -229,9 +266,9 @@ Useful commands:
 
 ### Application connection test
 
-From `/opt/payledger`, load the environment without printing it:
+From `/root/PayLedger`, load the environment without printing it:
 
-``` bash
+```bash
 set -a
 source .env
 set +a
@@ -241,19 +278,19 @@ psql "$DATABASE_URL" -c "SELECT current_user, current_database();"
 
 Expected database/user:
 
-``` text
+```text
 payledger | payledger
 ```
 
-------------------------------------------------------------------------
+---
 
-# 7. Database Migrations
+## 7. Database Migrations
 
 Database migrations are managed by the `@payledger/database` workspace.
 
 Available commands:
 
-``` bash
+```bash
 pnpm --filter @payledger/database db:generate
 pnpm --filter @payledger/database db:migrate
 pnpm --filter @payledger/database db:push
@@ -264,70 +301,68 @@ pnpm --filter @payledger/database db:studio
 
 Use:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 pnpm --filter @payledger/database db:migrate
 ```
 
-Do not generate new migrations on production unless deliberately
-preparing a release.
+Do not generate new migrations on production unless deliberately preparing a release.
 
-Before applying a migration, make sure the intended code and migration
-files are present.
+Before applying a migration, make sure the intended code and migration files are present.
 
-------------------------------------------------------------------------
+---
 
-# 8. Redis
+## 8. Redis
 
 Check Redis:
 
-``` bash
+```bash
 redis-cli ping
 ```
 
 Expected:
 
-``` text
+```text
 PONG
 ```
 
 Service:
 
-``` bash
+```bash
 sudo systemctl status redis-server --no-pager
 ```
 
 Restart only when required:
 
-``` bash
+```bash
 sudo systemctl restart redis-server
 ```
 
 Check listener:
 
-``` bash
+```bash
 sudo ss -lntp | grep 6379
 ```
 
 Logs:
 
-``` bash
+```bash
 sudo journalctl -u redis-server --since "30 minutes ago" --no-pager
 ```
 
-------------------------------------------------------------------------
+---
 
-# 9. Node.js and pnpm
+## 9. Node.js and pnpm
 
 Production Node.js:
 
-``` text
+```text
 v24.21.0
 ```
 
 Check:
 
-``` bash
+```bash
 node --version
 npm --version
 pnpm --version
@@ -335,7 +370,7 @@ pnpm --version
 
 Production pnpm:
 
-``` text
+```text
 11.25.0
 ```
 
@@ -343,20 +378,20 @@ The repository requires Node.js `>=24`.
 
 The root project declares:
 
-``` text
+```text
 pnpm@11.25.0
 ```
 
 Always use the repository's pnpm workflow.
 
-------------------------------------------------------------------------
+---
 
-# 10. Project Structure
+## 10. Project Structure
 
 The PayLedger repository is a Turborepo monorepo.
 
-``` text
-/opt/payledger
+```text
+/root/PayLedger
 ├── apps/
 │   ├── user-panel/
 │   ├── admin-panel/
@@ -375,26 +410,25 @@ The PayLedger repository is a Turborepo monorepo.
 
 The application root is:
 
-``` text
-/opt/payledger
+```text
+/root/PayLedger
 ```
 
 For normal operational work:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 ```
 
-You do not need to run `cd /opt/payledger` before every command if you
-are already inside that directory.
+You do not need to run `cd /root/PayLedger` before every command if you are already inside that directory.
 
-------------------------------------------------------------------------
+---
 
-# 11. GitHub
+## 11. GitHub
 
 Repository:
 
-``` text
+```text
 AmitKrVr/PayLedger
 ```
 
@@ -404,54 +438,53 @@ The VPS uses a dedicated GitHub deploy key.
 
 GitHub SSH host alias:
 
-``` text
+```text
 github-payledger
 ```
 
 Test:
 
-``` bash
+```bash
 ssh -T git@github-payledger
 ```
 
-Expected authentication response indicates that GitHub authenticated the
-repository deploy key.
+Expected authentication response indicates that GitHub authenticated the repository deploy key.
 
 Application repository:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 git status
 ```
 
 Always inspect Git state before deployment.
 
-------------------------------------------------------------------------
+---
 
-# 12. Production Environment
+## 12. Production Environment
 
 Production environment file:
 
-``` text
-/opt/payledger/.env
+```text
+/root/PayLedger/.env
 ```
 
 Permissions:
 
-``` text
--rw------- devamit:devamit
+```text
+-rw------- root:root
 ```
 
 Check:
 
-``` bash
-stat -c '%A %U:%G %n' /opt/payledger/.env
+```bash
+stat -c '%A %U:%G %n' /root/PayLedger/.env
 ```
 
 Expected:
 
-``` text
--rw------- devamit:devamit /opt/payledger/.env
+```text
+-rw------- root:root /root/PayLedger/.env
 ```
 
 Never commit `.env`.
@@ -462,7 +495,7 @@ Never print the complete `.env`.
 
 The following production configuration is currently used:
 
-``` text
+```text
 NODE_ENV=production
 
 BACKEND_PORT=5001
@@ -483,67 +516,67 @@ Do not put secret values in this document.
 
 When changing `.env`:
 
-1.  Edit only the required variable.
-2.  Never print secrets.
-3.  Check file permissions.
-4.  Restart the affected service.
-5.  Verify the service.
-6.  Verify the public API/application.
+1. Edit only the required variable.
+2. Never print secrets.
+3. Check file permissions.
+4. Restart the affected service.
+5. Verify the service.
+6. Verify the public API/application.
 
 Example:
 
-``` bash
-nano /opt/payledger/.env
+```bash
+nano /root/PayLedger/.env
 ```
 
 Then:
 
-``` bash
-stat -c '%A %U:%G %n' /opt/payledger/.env
+```bash
+stat -c '%A %U:%G %n' /root/PayLedger/.env
 sudo systemctl restart payledger-backend
 sudo systemctl is-active payledger-backend
 curl -sS https://payledger-api.devamit.info/health
 ```
 
-------------------------------------------------------------------------
+---
 
-# 13. Frontend Production Environment
+## 13. Frontend Production Environment
 
 User panel:
 
-``` text
-/opt/payledger/apps/user-panel/.env.production
+```text
+/root/PayLedger/apps/user-panel/.env.production
 ```
 
 Admin panel:
 
-``` text
-/opt/payledger/apps/admin-panel/.env.production
+```text
+/root/PayLedger/apps/admin-panel/.env.production
 ```
 
 Both currently use:
 
-``` env
-NEXT_PUBLIC_API_URL=https://payledger-api.devamit.info/api/v1
+```env
+NEXT_PUBLIC_API_URL=https://payledger-api.devamit.info/api
 ```
 
 This value is included during the Next.js production build.
 
 Therefore, after changing `NEXT_PUBLIC_API_URL`, rebuild the frontend:
 
-``` bash
+```bash
 pnpm build
 ```
 
 Then restart the affected panel service.
 
-------------------------------------------------------------------------
+---
 
-# 14. systemd Services
+## 14. systemd Services
 
 PayLedger uses four systemd services.
 
-``` text
+```text
 payledger-backend.service
 payledger-payment-gateway.service
 payledger-user-panel.service
@@ -552,29 +585,29 @@ payledger-admin-panel.service
 
 All four services are enabled at boot.
 
-## Backend
+### Backend
 
 Service file:
 
-``` text
+```text
 /etc/systemd/system/payledger-backend.service
 ```
 
 Runs:
 
-``` text
-/opt/payledger/apps/backend/dist/index.js
+```text
+/root/PayLedger/apps/backend/dist/index.js
 ```
 
 Port:
 
-``` text
+```text
 5001
 ```
 
 Commands:
 
-``` bash
+```bash
 sudo systemctl status payledger-backend --no-pager
 sudo systemctl start payledger-backend
 sudo systemctl stop payledger-backend
@@ -585,34 +618,34 @@ sudo systemctl is-active payledger-backend
 
 Logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend --since "30 minutes ago" --no-pager
 sudo journalctl -u payledger-backend -f
 ```
 
-## Payment Gateway
+### Payment Gateway
 
 Service file:
 
-``` text
+```text
 /etc/systemd/system/payledger-payment-gateway.service
 ```
 
 Runs:
 
-``` text
-/opt/payledger/apps/payment-gateway/dist/index.js
+```text
+/root/PayLedger/apps/payment-gateway/dist/index.js
 ```
 
 Port:
 
-``` text
+```text
 5002
 ```
 
 Commands:
 
-``` bash
+```bash
 sudo systemctl status payledger-payment-gateway --no-pager
 sudo systemctl start payledger-payment-gateway
 sudo systemctl stop payledger-payment-gateway
@@ -623,28 +656,28 @@ sudo systemctl is-active payledger-payment-gateway
 
 Logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-payment-gateway --since "30 minutes ago" --no-pager
 sudo journalctl -u payledger-payment-gateway -f
 ```
 
-## User Panel
+### User Panel
 
 Service file:
 
-``` text
+```text
 /etc/systemd/system/payledger-user-panel.service
 ```
 
 Port:
 
-``` text
+```text
 3000
 ```
 
 Commands:
 
-``` bash
+```bash
 sudo systemctl status payledger-user-panel --no-pager
 sudo systemctl start payledger-user-panel
 sudo systemctl stop payledger-user-panel
@@ -655,28 +688,28 @@ sudo systemctl is-active payledger-user-panel
 
 Logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-user-panel --since "30 minutes ago" --no-pager
 sudo journalctl -u payledger-user-panel -f
 ```
 
-## Admin Panel
+### Admin Panel
 
 Service file:
 
-``` text
+```text
 /etc/systemd/system/payledger-admin-panel.service
 ```
 
 Port:
 
-``` text
+```text
 3001
 ```
 
 Commands:
 
-``` bash
+```bash
 sudo systemctl status payledger-admin-panel --no-pager
 sudo systemctl start payledger-admin-panel
 sudo systemctl stop payledger-admin-panel
@@ -687,18 +720,18 @@ sudo systemctl is-active payledger-admin-panel
 
 Logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-admin-panel --since "30 minutes ago" --no-pager
 sudo journalctl -u payledger-admin-panel -f
 ```
 
-------------------------------------------------------------------------
+---
 
-# 15. Check All PayLedger Services
+## 15. Check All PayLedger Services
 
 Quick service check:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo systemctl is-active payledger-payment-gateway
 sudo systemctl is-active payledger-user-panel
@@ -710,7 +743,7 @@ sudo systemctl is-active redis-server
 
 Expected:
 
-``` text
+```text
 active
 active
 active
@@ -722,7 +755,7 @@ active
 
 Check boot enablement:
 
-``` bash
+```bash
 sudo systemctl is-enabled payledger-backend
 sudo systemctl is-enabled payledger-payment-gateway
 sudo systemctl is-enabled payledger-user-panel
@@ -730,55 +763,55 @@ sudo systemctl is-enabled payledger-admin-panel
 sudo systemctl is-enabled nginx
 ```
 
-------------------------------------------------------------------------
+---
 
-# 16. Nginx
+## 16. Nginx
 
 Nginx is the public reverse proxy.
 
 Configuration:
 
-``` text
+```text
 /etc/nginx/sites-available/payledger
 ```
 
 Enabled configuration:
 
-``` text
+```text
 /etc/nginx/sites-enabled/payledger
 ```
 
 Current routing:
 
-``` text
+```text
 payledger.devamit.info
-    -> 127.0.0.1:3000
+   -> 127.0.0.1:3000
 
 payledger-admin.devamit.info
-    -> 127.0.0.1:3001
+   -> 127.0.0.1:3001
 
 payledger-api.devamit.info
-    -> 127.0.0.1:5001
+   -> 127.0.0.1:5001
 
 payledger-gateway.devamit.info
-    -> 127.0.0.1:5002
+   -> 127.0.0.1:5002
 ```
 
 Test Nginx configuration before applying changes:
 
-``` bash
+```bash
 sudo nginx -t
 ```
 
 Reload:
 
-``` bash
+```bash
 sudo systemctl reload nginx
 ```
 
 Status:
 
-``` bash
+```bash
 sudo systemctl status nginx --no-pager
 sudo systemctl is-enabled nginx
 sudo systemctl is-active nginx
@@ -786,27 +819,26 @@ sudo systemctl is-active nginx
 
 Logs:
 
-``` bash
+```bash
 sudo tail -n 100 /var/log/nginx/access.log
 sudo tail -n 100 /var/log/nginx/error.log
 ```
 
-Do not restart unrelated services when only an Nginx configuration
-change is required.
+Do not restart unrelated services when only an Nginx configuration change is required.
 
-------------------------------------------------------------------------
+---
 
-# 17. DNS
+## 17. DNS
 
 Main domain:
 
-``` text
+```text
 devamit.info
 ```
 
 PayLedger subdomains:
 
-``` text
+```text
 payledger.devamit.info
 payledger-admin.devamit.info
 payledger-api.devamit.info
@@ -815,20 +847,20 @@ payledger-gateway.devamit.info
 
 All four point to:
 
-``` text
-200.141.5.212
+```text
+168.144.210.205
 ```
 
 DNS is authoritative through Vercel DNS:
 
-``` text
+```text
 ns1.vercel-dns.com
 ns2.vercel-dns.com
 ```
 
 Check DNS:
 
-``` bash
+```bash
 dig +short payledger.devamit.info
 dig +short payledger-admin.devamit.info
 dig +short payledger-api.devamit.info
@@ -837,23 +869,22 @@ dig +short payledger-gateway.devamit.info
 
 Check public resolvers:
 
-``` bash
+```bash
 dig +short payledger.devamit.info @1.1.1.1
 dig +short payledger-api.devamit.info @1.1.1.1
 ```
 
-If DNS is wrong, fix the authoritative DNS records before
-troubleshooting Nginx or Certbot.
+If DNS is wrong, fix the authoritative DNS records before troubleshooting Nginx or Certbot.
 
-------------------------------------------------------------------------
+---
 
-# 18. HTTPS / Certbot
+## 18. HTTPS / Certbot
 
 PayLedger uses Let's Encrypt.
 
 Certificate covers:
 
-``` text
+```text
 payledger.devamit.info
 payledger-admin.devamit.info
 payledger-api.devamit.info
@@ -862,20 +893,20 @@ payledger-gateway.devamit.info
 
 Certificate location:
 
-``` text
+```text
 /etc/letsencrypt/live/payledger.devamit.info/fullchain.pem
 /etc/letsencrypt/live/payledger.devamit.info/privkey.pem
 ```
 
 Check certificates:
 
-``` bash
+```bash
 sudo certbot certificates
 ```
 
 Test renewal:
 
-``` bash
+```bash
 sudo certbot renew --dry-run
 ```
 
@@ -883,44 +914,44 @@ HTTP should redirect to HTTPS.
 
 Example:
 
-``` bash
+```bash
 curl -I http://payledger.devamit.info
 ```
 
 HTTPS test:
 
-``` bash
+```bash
 curl -I https://payledger.devamit.info
 curl -I https://payledger-admin.devamit.info
 curl -I https://payledger-api.devamit.info
 curl -I https://payledger-gateway.devamit.info
 ```
 
-------------------------------------------------------------------------
+---
 
-# 19. Health Check
+## 19. Health Check
 
 Backend health route:
 
-``` text
+```text
 GET /health
 ```
 
 Public URL:
 
-``` text
+```text
 https://payledger-api.devamit.info/health
 ```
 
 Check:
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
 Expected:
 
-``` json
+```json
 {
   "status": "ok"
 }
@@ -928,129 +959,127 @@ Expected:
 
 A successful response confirms:
 
-``` text
+```text
 HTTPS
   -> Nginx
   -> Backend
   -> /health
 ```
 
-------------------------------------------------------------------------
+---
 
-# 20. Local Application Checks
+## 20. Local Application Checks
 
 Backend:
 
-``` bash
+```bash
 curl -sS http://127.0.0.1:5001/health
 ```
 
 User panel:
 
-``` bash
+```bash
 curl -I http://127.0.0.1:3000
 ```
 
 Admin panel:
 
-``` bash
+```bash
 curl -I http://127.0.0.1:3001
 ```
 
-Payment gateway root route may return `404` because `GET /` is not
-necessarily a defined gateway route.
+Payment gateway root route may return `404` because `GET /` is not necessarily a defined gateway route.
 
 A `404` from the gateway root is not automatically a service failure.
 
-------------------------------------------------------------------------
+---
 
-# 21. Standard Production Deployment
+## 21. Standard Production Deployment
 
 Use this controlled sequence for an approved release.
 
-## 1. SSH
+### 1. SSH
 
-``` bash
-ssh -i ~/.ssh/canten_vps_ed25519 devamit@200.141.5.212
+```bash
+ssh payledger-vps
 ```
 
-## 2. Enter project
+### 2. Enter project
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 ```
 
-## 3. Inspect Git
+### 3. Inspect Git
 
-``` bash
+```bash
 git status
 git status --short
 ```
 
 Do not continue if unexpected local changes or untracked files exist.
 
-## 4. Pull intended release
+### 4. Pull intended release
 
-``` bash
+```bash
 git pull
 ```
 
-For controlled releases, prefer a reviewed commit/tag rather than
-blindly deploying unknown remote state.
+For controlled releases, prefer a reviewed commit/tag rather than blindly deploying unknown remote state.
 
-## 5. Install dependencies
+### 5. Install dependencies
 
-``` bash
+```bash
 pnpm install --frozen-lockfile
 ```
 
-## 6. Typecheck
+### 6. Typecheck
 
-``` bash
+```bash
 pnpm check-types
 ```
 
-## 7. Build
+### 7. Build
 
-``` bash
+```bash
 pnpm build
 ```
 
-## 8. Database migration
+### 8. Database migration
 
 Only when the release contains migrations:
 
-``` bash
+```bash
 pnpm --filter @payledger/database db:migrate
 ```
 
-## 9. Restart application services
+### 9. Restart application services
 
-``` bash
+```bash
 sudo systemctl restart payledger-backend
 sudo systemctl restart payledger-payment-gateway
 sudo systemctl restart payledger-user-panel
 sudo systemctl restart payledger-admin-panel
 ```
 
-## 10. Verify services
+### 10. Verify services
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo systemctl is-active payledger-payment-gateway
 sudo systemctl is-active payledger-user-panel
 sudo systemctl is-active payledger-admin-panel
 ```
 
-## 11. Verify API
+### 11. Verify API
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
-## 12. Review logs
+### 12. Review logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend --since "5 minutes ago" --no-pager
 sudo journalctl -u payledger-payment-gateway --since "5 minutes ago" --no-pager
 sudo journalctl -u payledger-user-panel --since "5 minutes ago" --no-pager
@@ -1061,42 +1090,40 @@ Do not compress the deployment into one blind shell command.
 
 Step-by-step deployment makes failures visible.
 
-------------------------------------------------------------------------
+---
 
-# 22. Admin Bootstrap
+## 22. Admin Bootstrap
 
 PayLedger contains an admin creation script:
 
-``` text
+```text
 apps/backend/src/scripts/create-admin.ts
 ```
 
 Package script:
 
-``` text
+```text
 admin:create
 ```
 
 Run from the project root:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 pnpm --filter @payledger/backend admin:create
 ```
 
-Do not create an admin by manually inserting password hashes into the
-database unless the application explicitly requires it.
+Do not create an admin by manually inserting password hashes into the database unless the application explicitly requires it.
 
-Use the application's bootstrap script so password hashing and
-validation follow the application implementation.
+Use the application's bootstrap script so password hashing and validation follow the application implementation.
 
-------------------------------------------------------------------------
+---
 
-# 23. Reboot and Shutdown
+## 23. Reboot and Shutdown
 
 Closing SSH:
 
-``` bash
+```bash
 exit
 ```
 
@@ -1104,22 +1131,21 @@ does not stop PayLedger.
 
 Reboot:
 
-``` bash
+```bash
 sudo reboot
 ```
 
-Because the PayLedger services are enabled with systemd, they should
-automatically start after reboot.
+Because the PayLedger services are enabled with systemd, they should automatically start after reboot.
 
 After reconnecting:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 ```
 
 Check:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo systemctl is-active payledger-payment-gateway
 sudo systemctl is-active payledger-user-panel
@@ -1131,62 +1157,61 @@ sudo systemctl is-active redis-server
 
 Then:
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
-------------------------------------------------------------------------
+---
 
-# 24. Troubleshooting: Backend Down
+## 24. Troubleshooting: Backend Down
 
 Run in this order:
 
-``` bash
+```bash
 sudo systemctl status payledger-backend --no-pager
 ```
 
 Then:
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend --since "15 minutes ago" --no-pager
 ```
 
 Check port:
 
-``` bash
+```bash
 sudo ss -lntp | grep 5001
 ```
 
 Check locally:
 
-``` bash
+```bash
 curl -sS http://127.0.0.1:5001/health
 ```
 
 Check Nginx:
 
-``` bash
+```bash
 sudo systemctl status nginx --no-pager
 ```
 
 Finally:
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
 Do not restart unrelated services without evidence.
 
-------------------------------------------------------------------------
+---
 
-# 25. Troubleshooting: 502 Bad Gateway
+## 25. Troubleshooting: 502 Bad Gateway
 
-A `502 Bad Gateway` generally means Nginx cannot successfully reach its
-upstream.
+A `502 Bad Gateway` generally means Nginx cannot successfully reach its upstream.
 
 For the backend:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo ss -lntp | grep 5001
 curl -sS http://127.0.0.1:5001/health
@@ -1196,7 +1221,7 @@ sudo tail -n 100 /var/log/nginx/error.log
 
 For the user panel:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-user-panel
 sudo ss -lntp | grep 3000
 curl -I http://127.0.0.1:3000
@@ -1204,7 +1229,7 @@ curl -I http://127.0.0.1:3000
 
 For the admin panel:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-admin-panel
 sudo ss -lntp | grep 3001
 curl -I http://127.0.0.1:3001
@@ -1212,32 +1237,32 @@ curl -I http://127.0.0.1:3001
 
 For the payment gateway:
 
-``` bash
+```bash
 sudo systemctl is-active payledger-payment-gateway
 sudo ss -lntp | grep 5002
 curl -i http://127.0.0.1:5002/
 ```
 
-------------------------------------------------------------------------
+---
 
-# 26. Troubleshooting: Database
+## 26. Troubleshooting: Database
 
 Run:
 
-``` bash
+```bash
 sudo systemctl status postgresql --no-pager
 ```
 
 Check listener:
 
-``` bash
+```bash
 sudo ss -lntp | grep 5432
 ```
 
 Test the configured application connection:
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 
 set -a
 source .env
@@ -1248,20 +1273,19 @@ psql "$DATABASE_URL" -c "SELECT current_user, current_database();"
 
 Check backend logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend --since "15 minutes ago" --no-pager
 ```
 
-Do not reset credentials or recreate the production database as a first
-troubleshooting step.
+Do not reset credentials or recreate the production database as a first troubleshooting step.
 
-------------------------------------------------------------------------
+---
 
-# 27. Troubleshooting: Redis
+## 27. Troubleshooting: Redis
 
 Check:
 
-``` bash
+```bash
 sudo systemctl status redis-server --no-pager
 redis-cli ping
 sudo ss -lntp | grep 6379
@@ -1269,32 +1293,32 @@ sudo ss -lntp | grep 6379
 
 Expected:
 
-``` text
+```text
 PONG
 ```
 
 If necessary:
 
-``` bash
+```bash
 sudo systemctl restart redis-server
 sudo systemctl restart payledger-backend
 ```
 
 Then verify:
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
 Review backend logs if the service does not recover.
 
-------------------------------------------------------------------------
+---
 
-# 28. Troubleshooting: HTTPS
+## 28. Troubleshooting: HTTPS
 
 Run:
 
-``` bash
+```bash
 sudo nginx -t
 sudo systemctl status nginx --no-pager
 sudo ss -lntp | grep 443
@@ -1304,24 +1328,24 @@ sudo certbot renew --dry-run
 
 Then:
 
-``` bash
+```bash
 curl -Iv https://payledger-api.devamit.info/health
 ```
 
 Verify:
 
--   Certificate hostname matches.
--   TLS verification succeeds.
--   HTTPS request reaches Nginx.
--   API returns the expected response.
+- Certificate hostname matches.
+- TLS verification succeeds.
+- HTTPS request reaches Nginx.
+- API returns the expected response.
 
-------------------------------------------------------------------------
+---
 
-# 29. Troubleshooting: DNS
+## 29. Troubleshooting: DNS
 
 Run:
 
-``` bash
+```bash
 dig +short payledger.devamit.info
 dig +short payledger-admin.devamit.info
 dig +short payledger-api.devamit.info
@@ -1330,7 +1354,7 @@ dig +short payledger-gateway.devamit.info
 
 Public resolvers:
 
-``` bash
+```bash
 dig +short payledger.devamit.info @8.8.8.8
 dig +short payledger.devamit.info @1.1.1.1
 
@@ -1340,49 +1364,48 @@ dig +short payledger-api.devamit.info @1.1.1.1
 
 Authoritative nameservers:
 
-``` bash
+```bash
 dig +short NS devamit.info
 ```
 
-If authoritative DNS is wrong, fix the DNS records before repeatedly
-changing Nginx.
+If authoritative DNS is wrong, fix the DNS records before repeatedly changing Nginx.
 
-------------------------------------------------------------------------
+---
 
-# 30. Troubleshooting: Frontend
+## 30. Troubleshooting: Frontend
 
 If the user panel or admin panel does not work:
 
 Check service:
 
-``` bash
+```bash
 sudo systemctl status payledger-user-panel --no-pager
 sudo systemctl status payledger-admin-panel --no-pager
 ```
 
 Check logs:
 
-``` bash
+```bash
 sudo journalctl -u payledger-user-panel --since "15 minutes ago" --no-pager
 sudo journalctl -u payledger-admin-panel --since "15 minutes ago" --no-pager
 ```
 
 Check ports:
 
-``` bash
+```bash
 sudo ss -lntp | grep -E ':3000|:3001'
 ```
 
 Check local services:
 
-``` bash
+```bash
 curl -I http://127.0.0.1:3000
 curl -I http://127.0.0.1:3001
 ```
 
 Check the production API variable:
 
-``` bash
+```bash
 grep -E '^NEXT_PUBLIC_API_URL=' \
   apps/user-panel/.env.production \
   apps/admin-panel/.env.production
@@ -1390,43 +1413,43 @@ grep -E '^NEXT_PUBLIC_API_URL=' \
 
 Expected:
 
-``` text
-https://payledger-api.devamit.info/api/v1
+```text
+https://payledger-api.devamit.info/api
 ```
 
 If this value changes, rebuild:
 
-``` bash
+```bash
 pnpm build
 ```
 
 Then restart the affected panel service.
 
-------------------------------------------------------------------------
+---
 
-# 31. Git and Secret Safety
+## 31. Git and Secret Safety
 
 Before deployment:
 
-``` bash
+```bash
 git status --short
 ```
 
 Expected for a clean tree:
 
-``` text
+```text
 (no output)
 ```
 
 Check `.env` is ignored:
 
-``` bash
+```bash
 git check-ignore -v .env
 ```
 
 Never use:
 
-``` bash
+```bash
 git add .
 ```
 
@@ -1434,20 +1457,20 @@ without first reviewing untracked files.
 
 Never commit:
 
--   `.env`
--   database passwords
--   JWT secrets
--   webhook secrets
--   private keys
--   production credentials
+- `.env`
+- database passwords
+- JWT secrets
+- webhook secrets
+- private keys
+- production credentials
 
-------------------------------------------------------------------------
+---
 
-# 32. Final Production Verification
+## 32. Final Production Verification
 
-## Services
+### Services
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo systemctl is-active payledger-payment-gateway
 sudo systemctl is-active payledger-user-panel
@@ -1459,85 +1482,84 @@ sudo systemctl is-active redis-server
 
 All should report:
 
-``` text
+```text
 active
 ```
 
-## Ports
+### Ports
 
-``` bash
+```bash
 sudo ss -lntp
 ```
 
 Verify the expected PayLedger ports.
 
-## API
+### API
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
 Expected:
 
-``` json
+```json
 {"status":"ok"}
 ```
 
-## User panel
+### User panel
 
-``` bash
+```bash
 curl -I https://payledger.devamit.info
 ```
 
 Expected application response may redirect to:
 
-``` text
+```text
 /login
 ```
 
-## Admin panel
+### Admin panel
 
-``` bash
+```bash
 curl -I https://payledger-admin.devamit.info
 ```
 
 Expected application response may redirect to:
 
-``` text
+```text
 /login
 ```
 
-## Payment gateway
+### Payment gateway
 
-``` bash
+```bash
 curl -I https://payledger-gateway.devamit.info
 ```
 
 A `404` on `/` can be normal when the gateway has no `GET /` route.
 
-The important part is that the response comes from PayLedger/Nginx and
-not from an unrelated service.
+The important part is that the response comes from PayLedger/Nginx and not from an unrelated service.
 
-## HTTPS
+### HTTPS
 
-``` bash
+```bash
 sudo certbot renew --dry-run
 ```
 
-## Recent logs
+### Recent logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend --since "10 minutes ago" --no-pager
 sudo journalctl -u payledger-payment-gateway --since "10 minutes ago" --no-pager
 sudo journalctl -u payledger-user-panel --since "10 minutes ago" --no-pager
 sudo journalctl -u payledger-admin-panel --since "10 minutes ago" --no-pager
 ```
 
-------------------------------------------------------------------------
+---
 
-# 33. Production Release Checklist
+## 33. Production Release Checklist
 
-``` text
+```text
 [ ] Correct release/commit confirmed
 [ ] Git working tree reviewed
 [ ] pnpm install --frozen-lockfile completed
@@ -1564,31 +1586,31 @@ sudo journalctl -u payledger-admin-panel --since "10 minutes ago" --no-pager
 [ ] No unexpected startup errors
 ```
 
-------------------------------------------------------------------------
+---
 
-# 34. Change Management
+## 34. Change Management
 
 For production infrastructure changes:
 
-1.  Know what the change does.
-2.  Check the current state.
-3.  Make one logical change at a time.
-4.  Test configuration before reload/restart.
-5.  Verify the affected service.
-6.  Check logs.
-7.  Verify the public API.
-8.  Keep a working recovery path.
+1. Know what the change does.
+2. Check the current state.
+3. Make one logical change at a time.
+4. Test configuration before reload/restart.
+5. Verify the affected service.
+6. Check logs.
+7. Verify the public API.
+8. Keep a working recovery path.
 
 For Nginx changes:
 
-``` bash
+```bash
 sudo nginx -t
 sudo systemctl reload nginx
 ```
 
 For systemd service changes:
 
-``` bash
+```bash
 sudo systemctl daemon-reload
 sudo systemctl restart <service>
 sudo systemctl is-active <service>
@@ -1596,13 +1618,13 @@ sudo systemctl is-active <service>
 
 Do not restart unrelated services without a reason.
 
-------------------------------------------------------------------------
+---
 
-# 35. Golden Troubleshooting Flow
+## 35. Golden Troubleshooting Flow
 
 When something is broken, follow this order:
 
-``` text
+```text
 Is the VPS reachable?
         |
         v
@@ -1631,19 +1653,19 @@ Do not randomly restart every service.
 
 Follow the dependency chain.
 
-------------------------------------------------------------------------
+---
 
-# 36. Quick Daily Operations
+## 36. Quick Daily Operations
 
-## Go to project
+### Go to project
 
-``` bash
-cd /opt/payledger
+```bash
+cd /root/PayLedger
 ```
 
-## Check everything
+### Check everything
 
-``` bash
+```bash
 sudo systemctl is-active payledger-backend
 sudo systemctl is-active payledger-payment-gateway
 sudo systemctl is-active payledger-user-panel
@@ -1653,74 +1675,74 @@ sudo systemctl is-active postgresql
 sudo systemctl is-active redis-server
 ```
 
-## API health
+### API health
 
-``` bash
+```bash
 curl -sS https://payledger-api.devamit.info/health
 ```
 
-## Backend logs
+### Backend logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-backend -f
 ```
 
-## Gateway logs
+### Gateway logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-payment-gateway -f
 ```
 
-## User panel logs
+### User panel logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-user-panel -f
 ```
 
-## Admin panel logs
+### Admin panel logs
 
-``` bash
+```bash
 sudo journalctl -u payledger-admin-panel -f
 ```
 
-## Nginx logs
+### Nginx logs
 
-``` bash
+```bash
 sudo tail -f /var/log/nginx/access.log
 sudo tail -f /var/log/nginx/error.log
 ```
 
-------------------------------------------------------------------------
+---
 
-# 37. Architecture Summary
+## 37. Architecture Summary
 
-``` text
-                         Internet
-                            |
-                            v
-                     Nginx :80/:443
-                            |
-          +-----------------+------------------+
-          |                 |                  |
-          v                 v                  v
-     User Panel        Admin Panel        Backend API
-       :3000              :3001              :5001
-                                               |
-                                  +------------+------------+
-                                  |                         |
-                                  v                         v
-                            PostgreSQL                   Redis
-                             :5432                       :6379
-                                  |
-                                  |
-                                  v
-                         Payment Gateway
-                              :5002
+```text
+                        Internet
+                           |
+                           v
+                    Nginx :80/:443
+                           |
+         +-----------------+------------------+
+         |                 |                  |
+         v                 v                  v
+    User Panel        Admin Panel        Backend API
+      :3000              :3001              :5001
+                                              |
+                                 +------------+------------+
+                                 |                         |
+                                 v                         v
+                           PostgreSQL                   Redis
+                            :5432                       :6379
+                                 |
+                                 |
+                                 v
+                        Payment Gateway
+                             :5002
 ```
 
 ### Public endpoints
 
-``` text
+```text
 User:
 https://payledger.devamit.info
 
@@ -1736,41 +1758,40 @@ https://payledger-gateway.devamit.info
 
 ### Application directory
 
-``` text
-/opt/payledger
+```text
+/root/PayLedger
 ```
 
 ### Linux user
 
-``` text
+```text
 devamit
 ```
 
 ### Production services
 
-``` text
+```text
 payledger-backend.service
 payledger-payment-gateway.service
 payledger-user-panel.service
 payledger-admin-panel.service
 ```
 
-------------------------------------------------------------------------
+---
 
-# 38. Operational Principle
+## 38. Operational Principle
 
 The PayLedger VPS should be treated as production infrastructure:
 
--   Make deliberate changes.
--   Verify before and after changes.
--   Keep secrets out of Git.
--   Keep PostgreSQL and Redis private.
--   Use Nginx as the public entry point.
--   Use HTTPS.
--   Keep systemd services enabled.
--   Review logs before corrective action.
--   Do not recreate production databases as a first troubleshooting
-    step.
--   Do not randomly restart unrelated services.
--   Use the dependency chain when troubleshooting.
--   Keep deployment steps visible and controlled.
+- Make deliberate changes.
+- Verify before and after changes.
+- Keep secrets out of Git.
+- Keep PostgreSQL and Redis private.
+- Use Nginx as the public entry point.
+- Use HTTPS.
+- Keep systemd services enabled.
+- Review logs before corrective action.
+- Do not recreate production databases as a first troubleshooting step.
+- Do not randomly restart unrelated services.
+- Use the dependency chain when troubleshooting.
+- Keep deployment steps visible and controlled.

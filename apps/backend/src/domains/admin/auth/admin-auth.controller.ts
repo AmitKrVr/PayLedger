@@ -47,6 +47,7 @@ export const adminLoginController: RequestHandler = async (
 
         setAuthCookies(
             res,
+            'admin',
             result.accessToken,
             result.refreshToken,
         );
@@ -69,7 +70,7 @@ export const adminRefreshController: RequestHandler = async (
 ) => {
     try {
         const refreshToken =
-            req.cookies?.[getRefreshTokenCookieName()];
+            req.cookies?.[getRefreshTokenCookieName('admin')];
 
         const context = extractRequestContext(req);
 
@@ -77,6 +78,7 @@ export const adminRefreshController: RequestHandler = async (
 
         setAuthCookies(
             res,
+            'admin',
             result.accessToken,
             result.refreshToken,
         );
@@ -88,7 +90,7 @@ export const adminRefreshController: RequestHandler = async (
             data: null,
         });
     } catch (error) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'admin');
         next(error);
     }
 };
@@ -100,16 +102,16 @@ export const adminLogoutController: RequestHandler = async (
 ) => {
     try {
         const refreshToken =
-            req.cookies?.[getRefreshTokenCookieName()];
+            req.cookies?.[getRefreshTokenCookieName('admin')];
 
         const accessToken =
-            req.cookies?.[getAccessTokenCookieName()];
+            req.cookies?.[getAccessTokenCookieName('admin')];
 
         const context = extractRequestContext(req);
 
         await logoutAdmin(refreshToken, accessToken, context);
 
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'admin');
 
         return sendSuccess(res, {
             statusCode: 200,
@@ -118,7 +120,7 @@ export const adminLogoutController: RequestHandler = async (
             data: null,
         });
     } catch (error) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'admin');
         next(error);
     }
 };

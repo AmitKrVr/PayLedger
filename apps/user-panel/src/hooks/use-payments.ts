@@ -2,7 +2,14 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { createPayment, getPayment, simulatePayment, type PaymentStatus } from "@/lib/api/payments"
+import {
+  createPayment,
+  getPayment,
+  listPayments,
+  simulatePayment,
+  type ListPaymentsParams,
+  type PaymentStatus,
+} from "@/lib/api/payments"
 
 const TERMINAL_STATUSES: PaymentStatus[] = ["SUCCESS", "FAILED", "CANCELLED", "EXPIRED"]
 
@@ -10,6 +17,18 @@ export function useCreatePayment() {
   return useMutation({
     mutationFn: ({ amount, idempotencyKey }: { amount: number; idempotencyKey: string }) =>
       createPayment(amount, idempotencyKey),
+  })
+}
+
+/** Every payment attempt the user has made, including ones that never
+ * became a wallet transaction (FAILED/CANCELLED/EXPIRED never credit the
+ * wallet, so they have no row in /v1/transactions -- this is the only
+ * place a failed deposit is still visible after the fact). */
+export function usePaymentsQuery(params: ListPaymentsParams) {
+  return useQuery({
+    queryKey: ["payments", "list", params],
+    queryFn: () => listPayments(params),
+    placeholderData: (previous) => previous,
   })
 }
 
@@ -24,6 +43,7 @@ export function useSimulatePayment() {
       simulatePayment(id, outcome),
     onSuccess: (payment) => {
       queryClient.setQueryData(["payments", "detail", payment.id], payment)
+      queryClient.invalidateQueries({ queryKey: ["payments", "list"] })
       queryClient.invalidateQueries({ queryKey: ["wallet"] })
       queryClient.invalidateQueries({ queryKey: ["transactions"] })
     },
@@ -40,6 +60,9 @@ export function usePaymentStatusQuery(id: string | null) {
     queryFn: () => getPayment(id as string),
     enabled: Boolean(id),
     refetchInterval: (query) => {
+      if (query.state.status === "error") {
+        return false
+      }
       const status = query.state.data?.status
       if (!status || TERMINAL_STATUSES.includes(status)) {
         return false

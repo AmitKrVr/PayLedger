@@ -7,11 +7,13 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { useLogin } from "@/hooks/use-login"
 import { getApiErrorMessage } from "@/lib/api/error-message"
 import { loginSchema, type LoginFormData } from "@/lib/schema"
+import { digitsOnly } from "@/lib/utils"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Field, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { PasswordInput } from "@/components/ui/password-input"
 
 export function LoginForm() {
   const loginMutation = useLogin()
@@ -26,6 +28,8 @@ export function LoginForm() {
     defaultValues: { mobile: "", password: "" },
   })
 
+  const mobileField = register("mobile")
+
   const onSubmit = (data: LoginFormData) => {
     setError("root", { message: "" })
     loginMutation.mutate(data, {
@@ -36,9 +40,9 @@ export function LoginForm() {
   }
 
   return (
-    <Card className="w-full max-w-sm">
+    <Card className="w-full max-w-sm border-0 shadow-xl shadow-foreground/5">
       <CardHeader>
-        <CardTitle className="text-xl">Welcome back</CardTitle>
+        <CardTitle className="text-2xl">Welcome back</CardTitle>
         <CardDescription>Sign in to your PayLedger account.</CardDescription>
       </CardHeader>
       <CardContent>
@@ -48,16 +52,21 @@ export function LoginForm() {
             <Input
               id="mobile"
               type="tel"
+              inputMode="numeric"
               autoFocus
               placeholder="10-digit mobile number"
-              {...register("mobile")}
+              {...mobileField}
+              onChange={(e) => {
+                e.target.value = digitsOnly(e.target.value, 10)
+                mobileField.onChange(e)
+              }}
             />
             <FieldError>{errors.mobile?.message}</FieldError>
           </Field>
 
           <Field>
             <FieldLabel htmlFor="password">Password</FieldLabel>
-            <Input id="password" type="password" placeholder="••••••••" {...register("password")} />
+            <PasswordInput id="password" placeholder="••••••••" {...register("password")} />
             <FieldError>{errors.password?.message}</FieldError>
           </Field>
 

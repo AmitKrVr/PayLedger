@@ -18,6 +18,17 @@ export const paymentIdParamsSchema = z.object({
     id: z.uuid({ error: 'Payment id must be a valid UUID' }),
 });
 
+export const listPaymentsQuerySchema = z.object({
+    page: z.coerce.number().int().positive().default(1),
+    limit: z.coerce.number().int().positive().max(100).default(20),
+    status: z
+        .enum(
+            ['CREATED', 'PROCESSING', 'SUCCESS', 'FAILED', 'CANCELLED', 'EXPIRED'],
+            { error: 'status must be a valid payment status' },
+        )
+        .optional(),
+});
+
 export const idempotencyKeyHeaderSchema = z.object({
     'idempotency-key': z.uuid({
         error: 'Idempotency-Key must be a valid UUID',
@@ -54,5 +65,6 @@ export const webhookPayloadSchema = z.object({
 
 export type CreatePaymentInput = z.infer<typeof createPaymentSchema>;
 export type PaymentIdParams = z.infer<typeof paymentIdParamsSchema>;
+export type ListPaymentsQuery = z.infer<typeof listPaymentsQuerySchema>;
 export type WebhookPayload = z.infer<typeof webhookPayloadSchema>;
 export type SimulatePaymentInput = z.infer<typeof simulatePaymentSchema>;

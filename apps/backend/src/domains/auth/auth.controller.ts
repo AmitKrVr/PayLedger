@@ -50,6 +50,7 @@ export const registerController: RequestHandler = async (
 
         setAuthCookies(
             res,
+            'user',
             result.accessToken,
             result.refreshToken,
         );
@@ -78,6 +79,7 @@ export const loginController: RequestHandler = async (
 
         setAuthCookies(
             res,
+            'user',
             result.accessToken,
             result.refreshToken,
         );
@@ -100,7 +102,7 @@ export const refreshController: RequestHandler = async (
 ) => {
     try {
         const refreshToken =
-            req.cookies?.[getRefreshTokenCookieName()];
+            req.cookies?.[getRefreshTokenCookieName('user')];
 
         const context = extractRequestContext(req);
 
@@ -111,6 +113,7 @@ export const refreshController: RequestHandler = async (
 
         setAuthCookies(
             res,
+            'user',
             result.accessToken,
             result.refreshToken,
         );
@@ -122,7 +125,7 @@ export const refreshController: RequestHandler = async (
             data: null,
         });
     } catch (error) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'user');
         next(error);
     }
 };
@@ -134,10 +137,10 @@ export const logoutController: RequestHandler = async (
 ) => {
     try {
         const refreshToken =
-            req.cookies?.[getRefreshTokenCookieName()];
+            req.cookies?.[getRefreshTokenCookieName('user')];
 
         const accessToken =
-            req.cookies?.[getAccessTokenCookieName()];
+            req.cookies?.[getAccessTokenCookieName('user')];
 
         const context = extractRequestContext(req);
 
@@ -147,7 +150,7 @@ export const logoutController: RequestHandler = async (
             context,
         );
 
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'user');
 
         return sendSuccess(res, {
             statusCode: 200,
@@ -156,7 +159,7 @@ export const logoutController: RequestHandler = async (
             data: null,
         });
     } catch (error) {
-        clearAuthCookies(res);
+        clearAuthCookies(res, 'user');
         next(error);
     }
 };

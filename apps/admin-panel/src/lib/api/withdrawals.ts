@@ -7,6 +7,7 @@ export type WithdrawalStatus = "PENDING" | "APPROVED" | "REJECTED"
 
 export interface WithdrawalListItem {
   id: string
+  reference: string | null
   user: {
     id: string
     name: string
@@ -20,12 +21,13 @@ export interface WithdrawalListItem {
 
 export interface WithdrawalDetail extends WithdrawalListItem {
   rejectionReason: string | null
-  processedByAdminId: string | null
+  processedByAdminName: string | null
 }
 
 export interface ListWithdrawalsParams {
   page: number
   limit: number
+  search?: string
   status?: WithdrawalStatus
 }
 

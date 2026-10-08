@@ -60,7 +60,7 @@ const createTestAdmin = async () => {
 
     return {
         id: admin.id,
-        cookie: `access_token=${result.accessToken}`,
+        cookie: `admin_access_token=${result.accessToken}`,
     };
 };
 
@@ -148,6 +148,12 @@ const reverseTransferReq = (cookie: string, transferId: string) =>
         .post(`/api/v1/admin/transfers/${transferId}/reverse`)
         .set('Cookie', cookie)
         .send({});
+
+const listTransfersReq = (cookie: string, query = '') =>
+    request(app).get(`/api/v1/admin/transfers${query}`).set('Cookie', cookie);
+
+const getTransferReq = (cookie: string, id: string) =>
+    request(app).get(`/api/v1/admin/transfers/${id}`).set('Cookie', cookie);
 
 describe('Admin Transfer Reversal domain', () => {
     afterAll(async () => {
@@ -656,6 +662,137 @@ describe('Admin Transfer Reversal domain', () => {
                 .from(ledgerEntries)
                 .where(eq(ledgerEntries.transactionId, reversalTxns[0]!.id));
             expect(entries).toHaveLength(2);
+        });
+    });
+
+    describe('GET /api/v1/admin/transfers', () => {
+        it('lists transfers with sender/recipient and fee breakdown', async () => {
+            const admin = await createTestAdmin();
+            const { transfer } = await createCompletedTransfer(100000n, 250);
+
+            const res = await listTransfersReq(admin.cookie);
+
+            expect(res.status).toBe(200);
+            const found = res.body.data.find(
+                (row: { id: string }) => row.id === transfer.id,
+            );
+            expect(found).toBeTruthy();
+            expect(found.amount).toBe(250);
+            expect(found.fee).toBe(found.total - found.amount);
+            expect(found.sender).toBeTruthy();
+            expect(found.recipient).toBeTruthy();
+            expect(res.body.meta.totalItems).toBeGreaterThanOrEqual(1);
+        });
+
+        it('finds a transfer by its human-readable reference, not a UUID', async () => {
+            const admin = await createTestAdmin();
+            const { transfer } = await createCompletedTransfer(100000n, 250);
+
+            const res = await listTransfersReq(
+                admin.cookie,
+                `?search=${transfer.referenceId}`,
+            );
+
+            expect(res.status).toBe(200);
+            expect(res.body.data).toHaveLength(1);
+            expect(res.body.data[0].id).toBe(transfer.id);
+            expect(res.body.data[0].reference).toBe(transfer.referenceId);
+        });
+
+        it('finds a transfer by recipient name', async () => {
+            const admin = await createTestAdmin();
+            const { receiver, transfer } = await createCompletedTransfer(
+                100000n,
+                250,
+            );
+
+            const res = await listTransfersReq(
+                admin.cookie,
+                `?search=${encodeURIComponent(receiver.userName)}`,
+            );
+
+            expect(res.status).toBe(200);
+            expect(
+                res.body.data.some((row: { id: string }) => row.id === transfer.id),
+            ).toBe(true);
+        });
+
+        it('filters by status', async () => {
+            const admin = await createTestAdmin();
+            const { transfer } = await createCompletedTransfer(100000n, 250);
+            await reverseTransferReq(admin.cookie, transfer.id);
+
+            const completedRes = await listTransfersReq(
+                admin.cookie,
+                '?status=COMPLETED',
+            );
+            expect(
+                completedRes.body.data.some(
+                    (row: { id: string }) => row.id === transfer.id,
+                ),
+            ).toBe(false);
+
+            const reversedRes = await listTransfersReq(
+                admin.cookie,
+                '?status=REVERSED',
+            );
+            expect(
+                reversedRes.body.data.some(
+                    (row: { id: string }) => row.id === transfer.id,
+                ),
+            ).toBe(true);
+        });
+
+        it('rejects a user token', async () => {
+            const sender = await createTestUser(100000n);
+
+            const res = await listTransfersReq(sender.userCookie);
+
+            expect(res.status).toBe(401);
+        });
+
+        it('rejects an unauthenticated request', async () => {
+            const res = await request(app).get('/api/v1/admin/transfers');
+
+            expect(res.status).toBe(401);
+        });
+    });
+
+    describe('GET /api/v1/admin/transfers/:id', () => {
+        it('returns full detail for a completed transfer with no reversal info', async () => {
+            const admin = await createTestAdmin();
+            const { transfer } = await createCompletedTransfer(100000n, 250);
+
+            const res = await getTransferReq(admin.cookie, transfer.id);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.status).toBe('COMPLETED');
+            expect(res.body.data.reversedAt).toBeNull();
+            expect(res.body.data.reversalReference).toBeNull();
+        });
+
+        it('includes reversedAt and a reversal reference after reversal', async () => {
+            const admin = await createTestAdmin();
+            const { transfer } = await createCompletedTransfer(100000n, 250);
+            await reverseTransferReq(admin.cookie, transfer.id);
+
+            const res = await getTransferReq(admin.cookie, transfer.id);
+
+            expect(res.status).toBe(200);
+            expect(res.body.data.status).toBe('REVERSED');
+            expect(res.body.data.reversedAt).toBeTruthy();
+            expect(res.body.data.reversalReference).toBeTruthy();
+            expect(res.body.data.reversalReference).not.toBe(
+                res.body.data.reference,
+            );
+        });
+
+        it('returns 404 for a nonexistent transfer', async () => {
+            const admin = await createTestAdmin();
+
+            const res = await getTransferReq(admin.cookie, randomUUID());
+
+            expect(res.status).toBe(404);
         });
     });
 });

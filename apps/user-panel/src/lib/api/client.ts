@@ -1,5 +1,6 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios"
 
+import { queryClient } from "@/lib/query-client"
 import { useAuthStore } from "@/store/use-auth-store"
 
 import type { ApiErrorBody } from "./types"
@@ -40,12 +41,17 @@ apiClient.interceptors.response.use(
       return Promise.reject(error)
     }
 
-    // INVALID_TOKEN -- an expired/malformed access token on an
-    // otherwise-live session. Retry once after a refresh. Any other
-    // 401 (UNAUTHORIZED: no cookie at all, or INVALID_REFRESH_TOKEN
-    // surfacing from a direct call) means there's no session to
-    // refresh, so just end it below.
-    if (code === "INVALID_TOKEN" && !config._retried) {
+    // INVALID_TOKEN (expired/malformed access token) and UNAUTHORIZED
+    // (no access-token cookie at all -- the normal case once it has
+    // simply expired and the browser dropped it) both mean "the access
+    // token is unusable, but the refresh token might still be good."
+    // Retry once after a refresh; INVALID_REFRESH_TOKEN surfacing from
+    // a direct call means there's genuinely no session, so that one
+    // still falls through to the logout below.
+    if (
+      (code === "INVALID_TOKEN" || code === "UNAUTHORIZED") &&
+      !config._retried
+    ) {
       config._retried = true
       try {
         await refreshOnce()
@@ -53,11 +59,13 @@ apiClient.interceptors.response.use(
       } catch (refreshErr) {
         // Refresh itself failed -- the session is genuinely over.
         useAuthStore.getState().clear()
+        queryClient.clear()
         return Promise.reject(refreshErr)
       }
     }
 
     useAuthStore.getState().clear()
+    queryClient.clear()
 
     return Promise.reject(error)
   }

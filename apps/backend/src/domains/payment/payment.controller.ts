@@ -7,17 +7,20 @@ import { env } from '@payledger/config';
 import { SUCCESS_CODES } from '../../constants/response.constants.js';
 import { ERROR_CODES } from '../../constants/response.constants.js';
 import { ERROR_MESSAGES } from '../../constants/message.constants.js';
-import { sendSuccess } from '../../lib/http.js';
+import { sendPaginated, sendSuccess } from '../../lib/http.js';
+import { logger } from '../../lib/logger.js';
 import { AuthenticationError } from '../../middleware/error.middleware.js';
 
 import {
     createPayment,
     getPayment,
+    listPayments,
     processPaymentWebhook,
     simulatePayment,
 } from './payment.service.js';
 import type {
     CreatePaymentInput,
+    ListPaymentsQuery,
     PaymentIdParams,
     SimulatePaymentInput,
 } from './payment.validator.js';
@@ -58,18 +61,41 @@ export const paymentWebhookSignatureMiddleware: RequestHandler = (
     _res,
     next,
 ) => {
+    // req.body here is whatever the gateway sent, not yet validated by
+    // webhookPayloadSchema -- read defensively, for tracing only.
+    const bodyOrderId = (req.body as { orderId?: unknown } | undefined)
+        ?.orderId;
+
     try {
         const signatureHeader = req.get(WEBHOOK_SIGNATURE_HEADER);
+
+        logger.info(
+            {
+                orderId: bodyOrderId,
+                hasSignatureHeader: Boolean(signatureHeader),
+            },
+            'Payment webhook received, verifying signature',
+        );
 
         if (
             !req.rawBody ||
             !verifyWebhookSignature(req.rawBody, signatureHeader)
         ) {
+            logger.warn(
+                { orderId: bodyOrderId },
+                'Payment webhook signature verification failed',
+            );
+
             throw new AuthenticationError(
                 ERROR_MESSAGES.INVALID_WEBHOOK_SIGNATURE,
                 ERROR_CODES.INVALID_WEBHOOK_SIGNATURE,
             );
         }
+
+        logger.info(
+            { orderId: bodyOrderId },
+            'Payment webhook signature verified',
+        );
 
         next();
     } catch (error) {
@@ -96,6 +122,32 @@ export const createPaymentController: RequestHandler = async (
             statusCode: 201,
             code: SUCCESS_CODES.CREATED,
             data: payment,
+        });
+    } catch (error) {
+        next(error);
+    }
+};
+
+export const listPaymentsController: RequestHandler = async (
+    req,
+    res,
+    next,
+) => {
+    try {
+        const { page, limit, status } =
+            req.validatedQuery as ListPaymentsQuery;
+
+        const { items, totalItems } = await listPayments(req.user!.userId, {
+            page,
+            limit,
+            status,
+        });
+
+        return sendPaginated(res, {
+            data: items,
+            page,
+            limit,
+            totalItems,
         });
     } catch (error) {
         next(error);

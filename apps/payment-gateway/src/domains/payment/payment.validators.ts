@@ -15,7 +15,10 @@ export const createGatewayPaymentSchema = z.object({
 });
 
 export const gatewayPaymentIdParamsSchema = z.object({
-    paymentId: z.uuid({ error: 'paymentId must be a valid UUID' }),
+    paymentId: z
+        .string({ error: 'paymentId is required' })
+        .trim()
+        .min(1, { error: 'paymentId is required' }),
 });
 
 export const failurePaymentSchema = z.object({

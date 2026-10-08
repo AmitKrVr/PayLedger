@@ -56,7 +56,7 @@ export function LoginForm() {
             Welcome Back
           </h1>
           <p className="text-sm text-muted-foreground font-normal leading-relaxed">
-            Sign in to explore and manage your products seamlessly.
+            Sign in to explore and manage seamlessly.
           </p>
         </div>
 

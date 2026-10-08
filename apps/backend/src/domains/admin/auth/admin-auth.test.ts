@@ -102,7 +102,7 @@ const extractCookieAttributes = (
 };
 
 const cookieHeaderFromLogin = (res: request.Response): string =>
-    `${extractCookie(res, 'access_token')}; ${extractCookie(res, 'refresh_token')}`;
+    `${extractCookie(res, 'admin_access_token')}; ${extractCookie(res, 'admin_refresh_token')}`;
 
 const waitForNextJwtSecond = async (): Promise<void> => {
     const msIntoCurrentSecond = Date.now() % 1000;
@@ -204,8 +204,8 @@ describe('Admin Auth domain', () => {
 
         const res = await login(admin.email, admin.password);
 
-        const accessCookie = extractCookieAttributes(res, 'access_token');
-        const refreshCookie = extractCookieAttributes(res, 'refresh_token');
+        const accessCookie = extractCookieAttributes(res, 'admin_access_token');
+        const refreshCookie = extractCookieAttributes(res, 'admin_refresh_token');
 
         expect(accessCookie).toMatch(/HttpOnly/i);
         expect(refreshCookie).toMatch(/HttpOnly/i);
@@ -268,7 +268,7 @@ describe('Admin Auth domain', () => {
     it('refreshes the admin session and rotates the refresh token', async () => {
         const admin = await createTestAdmin();
         const loginRes = await login(admin.email, admin.password);
-        const oldRefreshCookie = extractCookie(loginRes, 'refresh_token');
+        const oldRefreshCookie = extractCookie(loginRes, 'admin_refresh_token');
         const cookie = cookieHeaderFromLogin(loginRes);
 
         // JWT `iat` has 1-second resolution; without crossing a second
@@ -283,7 +283,7 @@ describe('Admin Auth domain', () => {
 
         expect(refreshRes.status).toBe(200);
 
-        const newRefreshCookie = extractCookie(refreshRes, 'refresh_token');
+        const newRefreshCookie = extractCookie(refreshRes, 'admin_refresh_token');
         expect(newRefreshCookie).not.toBe(oldRefreshCookie);
     });
 
@@ -291,8 +291,8 @@ describe('Admin Auth domain', () => {
         const admin = await createTestAdmin();
         const loginRes = await login(admin.email, admin.password);
         const cookie = cookieHeaderFromLogin(loginRes);
-        const accessCookie = extractCookie(loginRes, 'access_token');
-        const oldRefreshCookie = extractCookie(loginRes, 'refresh_token');
+        const accessCookie = extractCookie(loginRes, 'admin_access_token');
+        const oldRefreshCookie = extractCookie(loginRes, 'admin_refresh_token');
 
         await waitForNextJwtSecond();
 
@@ -310,7 +310,7 @@ describe('Admin Auth domain', () => {
 
         // Token-reuse detection revokes the whole session, so even the
         // NEW refresh token issued by the first refresh must now fail.
-        const newRefreshCookie = extractCookie(firstRefresh, 'refresh_token');
+        const newRefreshCookie = extractCookie(firstRefresh, 'admin_refresh_token');
         const afterReuse = await request(app)
             .post('/api/v1/admin/auth/refresh')
             .set('Cookie', `${accessCookie}; ${newRefreshCookie}`);
@@ -381,15 +381,15 @@ describe('Admin Auth domain', () => {
 
         const accessCookie = extractCookieAttributes(
             logoutRes,
-            'access_token',
+            'admin_access_token',
         );
         const refreshCookie = extractCookieAttributes(
             logoutRes,
-            'refresh_token',
+            'admin_refresh_token',
         );
 
-        expect(accessCookie).toMatch(/access_token=;/);
-        expect(refreshCookie).toMatch(/refresh_token=;/);
+        expect(accessCookie).toMatch(/admin_access_token=;/);
+        expect(refreshCookie).toMatch(/admin_refresh_token=;/);
     });
 
     it('keeps multiple sessions for the same admin independent', async () => {

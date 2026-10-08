@@ -4,17 +4,20 @@ import { requireUserAuth } from '../../middleware/auth.middleware.js';
 import {
     validateBody,
     validateParams,
+    validateQuery,
 } from '../../middleware/validation.middleware.js';
 
 import {
     createPaymentController,
     getPaymentController,
+    listPaymentsController,
     paymentWebhookSignatureMiddleware,
     simulatePaymentController,
     webhookController,
 } from './payment.controller.js';
 import {
     createPaymentSchema,
+    listPaymentsQuerySchema,
     paymentIdParamsSchema,
     simulatePaymentSchema,
 } from './payment.validator.js';
@@ -27,6 +30,13 @@ router.post(
     '/webhook',
     paymentWebhookSignatureMiddleware,
     webhookController,
+);
+
+router.get(
+    '/',
+    requireUserAuth,
+    validateQuery(listPaymentsQuerySchema),
+    listPaymentsController,
 );
 
 router.post(

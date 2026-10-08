@@ -133,7 +133,7 @@ export const loginAdmin = async (
             );
 
             throw new AuthenticationError(
-                ERROR_MESSAGES.INVALID_CREDENTIALS,
+                ERROR_MESSAGES.INVALID_CREDENTIALS_ADMIN,
                 ERROR_CODES.INVALID_CREDENTIALS,
             );
         }

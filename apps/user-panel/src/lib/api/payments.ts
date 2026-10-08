@@ -1,5 +1,5 @@
 import { apiClient } from "./client"
-import type { ApiSuccess } from "./types"
+import type { ApiPaginatedSuccess, ApiSuccess, PaginationMeta } from "./types"
 
 /** Mirrors apps/backend's payment.service.ts PaymentResponse exactly. */
 export type PaymentStatus =
@@ -15,7 +15,15 @@ export interface Payment {
   orderId: string
   amount: number
   status: PaymentStatus
+  failureReason: string | null
+  createdAt: string
   expiresAt: string | null
+}
+
+export interface ListPaymentsParams {
+  page: number
+  limit: number
+  status?: PaymentStatus
 }
 
 export async function createPayment(
@@ -28,6 +36,15 @@ export async function createPayment(
     { headers: { "Idempotency-Key": idempotencyKey } }
   )
   return data.data
+}
+
+export async function listPayments(
+  params: ListPaymentsParams
+): Promise<{ items: Payment[]; meta: PaginationMeta }> {
+  const { data } = await apiClient.get<ApiPaginatedSuccess<Payment>>("/v1/payments", {
+    params,
+  })
+  return { items: data.data, meta: data.meta }
 }
 
 export async function getPayment(id: string): Promise<Payment> {

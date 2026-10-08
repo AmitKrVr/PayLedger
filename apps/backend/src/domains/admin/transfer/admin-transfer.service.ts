@@ -3,6 +3,7 @@ import { generateBusinessId } from '@payledger/shared';
 
 import { ERROR_CODES } from '../../../constants/response.constants.js';
 import { ERROR_MESSAGES } from '../../../constants/message.constants.js';
+import { inrToPaise, paiseToInr } from '../../../lib/money.js';
 import {
     ConflictError,
     NotFoundError,
@@ -13,15 +14,93 @@ import { creditWallet, debitWallet } from '../../wallet/wallet.operations.js';
 import { findWalletByIdForUpdate } from '../../wallet/wallet.repository.js';
 
 import {
+    countTransfers,
     createReversalTransaction,
+    findReversalTransactionForTransfer,
+    findTransferByIdWithParties,
     findTransferForUpdate,
+    findTransfers,
     updateTransferAsReversed,
+    type ListTransfersFilters,
 } from './admin-transfer.repository.js';
+import type { ListTransfersQuery } from './admin-transfer.validator.js';
 
 type AuditContext = {
     requestId?: string;
     ipAddress?: string;
     userAgent?: string;
+};
+
+const toTransferListItem = (row: {
+    id: string;
+    referenceId: string;
+    amountPaise: bigint;
+    feePaise: bigint;
+    totalPaise: bigint;
+    status: string;
+    createdAt: Date;
+    completedAt: Date | null;
+    senderUserId: string;
+    senderName: string;
+    senderMobile: string;
+    receiverUserId: string;
+    receiverName: string;
+    receiverMobile: string;
+}) => ({
+    id: row.id,
+    reference: row.referenceId,
+    sender: { id: row.senderUserId, name: row.senderName, mobile: row.senderMobile },
+    recipient: { id: row.receiverUserId, name: row.receiverName, mobile: row.receiverMobile },
+    amount: paiseToInr(row.amountPaise),
+    fee: paiseToInr(row.feePaise),
+    total: paiseToInr(row.totalPaise),
+    status: row.status,
+    createdAt: row.createdAt,
+    completedAt: row.completedAt,
+});
+
+export const listTransfers = async (query: ListTransfersQuery) => {
+    const filters: ListTransfersFilters = {
+        search: query.search,
+        status: query.status,
+        from: query.from,
+        to: query.to,
+        minAmountPaise:
+            query.minAmount !== undefined ? inrToPaise(query.minAmount) : undefined,
+        maxAmountPaise:
+            query.maxAmount !== undefined ? inrToPaise(query.maxAmount) : undefined,
+        page: query.page,
+        limit: query.limit,
+    };
+
+    const [rows, totalItems] = await Promise.all([
+        findTransfers(filters),
+        countTransfers(filters),
+    ]);
+
+    return {
+        items: rows.map(toTransferListItem),
+        totalItems,
+    };
+};
+
+export const getTransfer = async (id: string) => {
+    const row = await findTransferByIdWithParties(id);
+
+    if (!row) {
+        throw new NotFoundError('Transfer not found', ERROR_CODES.NOT_FOUND);
+    }
+
+    const reversal =
+        row.status === TransferStatus.REVERSED
+            ? await findReversalTransactionForTransfer(id)
+            : null;
+
+    return {
+        ...toTransferListItem(row),
+        reversedAt: reversal?.completedAt ?? null,
+        reversalReference: reversal?.referenceId ?? null,
+    };
 };
 
 export const reverseTransfer = async (

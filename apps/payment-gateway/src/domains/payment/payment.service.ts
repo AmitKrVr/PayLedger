@@ -1,11 +1,10 @@
-import { randomUUID } from 'node:crypto';
-
 import {
     db,
     GatewayPaymentStatus,
     type DatabaseOrTransaction,
     type gatewayPayments,
 } from '@payledger/database';
+import { generateBusinessId } from '@payledger/shared';
 
 import { ERROR_MESSAGES } from './payment.constants.js';
 import {
@@ -57,7 +56,7 @@ export const createGatewayPayment = async (
         throw new ConflictError(ERROR_MESSAGES.DUPLICATE_ORDER_ID);
     }
 
-    const paymentId = randomUUID();
+    const paymentId = `PAY${generateBusinessId()}`;
 
     try {
         const payment = await createGatewayPaymentRecord({

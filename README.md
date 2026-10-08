@@ -3,7 +3,20 @@
 A digital wallet platform: users add money, send money to other users, and
 request withdrawals; admins review withdrawals and reverse completed
 transfers. See `docs/BRD.md`, `docs/ARCHITECTURE.md`, `docs/TECHNICAL.md`,
-and `docs/DECISIONS.md` for the full product/technical spec.
+and `DECISIONS.md` for the full product/technical spec.
+
+> This README covers **local development and evaluation only** — there is
+> no Docker setup and no deployment instructions here by design (see
+> `DECISIONS.md`).
+
+## Tech stack
+
+- **Backend**: Node.js, Express, TypeScript, Zod validation
+- **Database**: PostgreSQL via Drizzle ORM (migrations in `packages/database`)
+- **Cache / rate limiting**: Redis
+- **Frontend**: Next.js (App Router), React, Tailwind CSS
+- **Monorepo tooling**: Turborepo + pnpm workspaces
+- **Tests**: Vitest + Supertest (backend)
 
 ## Apps
 
@@ -164,10 +177,5 @@ npx vitest run src/domains/admin/withdrawal/admin-withdrawal.test.ts
 
 ## 10. Known limitations
 
-- No `docker-compose.yml` is currently checked in, despite `docs/ARCHITECTURE.md`
-  describing one for local Postgres/Redis — provide your own PostgreSQL and
-  Redis instances for now.
-- The Admin Panel cannot list or view transfers, payments, users, or audit
-  logs — the backend does not expose admin-facing read endpoints for those
-  domains yet (only withdrawal list/detail/approve/reject and transfer
-  reversal exist on the admin side).
+- No `docker-compose.yml` is checked in (intentional — see `DECISIONS.md`);
+  provide your own local PostgreSQL and Redis instances.

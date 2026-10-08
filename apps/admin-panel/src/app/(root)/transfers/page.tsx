@@ -1,165 +1,227 @@
 "use client"
 
 import * as React from "react"
-import { Loader2 } from "lucide-react"
-import { toast } from "sonner"
+import { ArrowLeftRight } from "lucide-react"
 
+import { EmptyState } from "@/components/empty-state"
 import { PageLayout } from "@/components/page-layout"
+import { RefreshButton } from "@/components/refresh-button"
 import { StatusBadge } from "@/components/status-badge"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { useReverseTransfer } from "@/hooks/use-transfers"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Skeleton } from "@/components/ui/skeleton"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { useDebouncedValue } from "@/hooks/use-debounced-value"
+import { useTransfersQuery } from "@/hooks/use-transfers"
 import { getApiErrorMessage } from "@/lib/api/error-message"
-import type { ReversedTransfer } from "@/lib/api/transfers"
+import type { TransferStatus } from "@/lib/api/transfers"
+import { computeSerial } from "@/lib/pagination"
+import { transferStatusLabel, transferStatusVariant } from "@/lib/transfers/status"
 
-const UUID_PATTERN =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+import { TransferDetailSheet } from "./_components/transfer-detail-sheet"
+
+const PAGE_SIZE = 20
+
+type StatusFilter = "ALL" | TransferStatus
+
+const STATUS_FILTERS: { value: StatusFilter; label: string }[] = [
+  { value: "ALL", label: "All statuses" },
+  { value: "PENDING", label: "Pending" },
+  { value: "COMPLETED", label: "Completed" },
+  { value: "FAILED", label: "Failed" },
+  { value: "REVERSED", label: "Reversed" },
+]
+
+function formatAmount(amount: number): string {
+  return `₹${amount.toLocaleString("en-IN")}`
+}
 
 function formatDate(value: string | null): string {
   if (!value) return "—"
-  return new Date(value).toLocaleString(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  })
+  return new Date(value).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })
 }
 
 export default function TransfersPage() {
-  const [transferId, setTransferId] = React.useState("")
-  const [confirmOpen, setConfirmOpen] = React.useState(false)
-  const [result, setResult] = React.useState<ReversedTransfer | null>(null)
-  const [formError, setFormError] = React.useState<string | null>(null)
+  const [page, setPage] = React.useState(1)
+  const [search, setSearch] = React.useState("")
+  const [status, setStatus] = React.useState<StatusFilter>("ALL")
+  const [selectedId, setSelectedId] = React.useState<string | null>(null)
+  const debouncedSearch = useDebouncedValue(search)
 
-  const reverseMutation = useReverseTransfer()
+  const { data, isLoading, isFetching, isError, error, refetch } = useTransfersQuery({
+    page,
+    limit: PAGE_SIZE,
+    search: debouncedSearch || undefined,
+    status: status === "ALL" ? undefined : status,
+  })
 
-  const isValidId = UUID_PATTERN.test(transferId.trim())
-
-  const handleReverse = () => {
-    reverseMutation.mutate(transferId.trim(), {
-      onSuccess: (reversed) => {
-        setResult(reversed)
-        setConfirmOpen(false)
-        toast.success("Transfer reversed successfully")
-      },
-      onError: (error) => {
-        setConfirmOpen(false)
-        setFormError(getApiErrorMessage(error, "Failed to reverse transfer"))
-      },
-    })
-  }
-
-  const startOver = () => {
-    setResult(null)
-    setTransferId("")
-    setFormError(null)
-  }
+  const items = data?.items ?? []
+  const meta = data?.meta
 
   return (
     <PageLayout
       title="Transfers"
-      description="Reverse a completed transfer by its transfer ID."
+      description="Inspect transfers and reverse a completed one."
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            placeholder="Search reference, sender, recipient"
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setPage(1)
+            }}
+            className="w-64"
+          />
+          <Select
+            value={status}
+            onValueChange={(value) => {
+              setStatus(value as StatusFilter)
+              setPage(1)
+            }}
+          >
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {STATUS_FILTERS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <RefreshButton isRefreshing={isFetching && !isLoading} onClick={() => refetch()} />
+        </div>
+      }
     >
-      <Card className="max-w-lg">
-        <CardHeader>
-          <CardTitle>Reverse a transfer</CardTitle>
-          <CardDescription>
-            PayLedger does not yet expose an admin transfer list/detail API --
-            only reversal. Enter the internal transfer ID (obtained from
-            support tooling or the database) to reverse it.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {!result ? (
-            <div className="flex flex-col gap-4">
-              <Field>
-                <FieldLabel htmlFor="transfer-id">Transfer ID</FieldLabel>
-                <Input
-                  id="transfer-id"
-                  placeholder="e.g. 3fa85f64-5717-4562-b3fc-2c963f66afa6"
-                  value={transferId}
-                  onChange={(e) => {
-                    setTransferId(e.target.value)
-                    setFormError(null)
-                  }}
-                />
-                <FieldDescription>
-                  This must be the transfer&apos;s internal UUID, not its reference ID.
-                </FieldDescription>
-                <FieldError>{formError}</FieldError>
-              </Field>
+      <div className="rounded-xl border border-border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-12 text-center">SN</TableHead>
+              <TableHead>Reference</TableHead>
+              <TableHead>Sender</TableHead>
+              <TableHead>Recipient</TableHead>
+              <TableHead>Amount</TableHead>
+              <TableHead>Fee</TableHead>
+              <TableHead>Status</TableHead>
+              <TableHead>Created</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading &&
+              Array.from({ length: 6 }).map((_, index) => (
+                <TableRow key={index}>
+                  {Array.from({ length: 8 }).map((__, cellIndex) => (
+                    <TableCell key={cellIndex}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
 
-              <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <Button
-                  variant="destructive"
-                  disabled={!isValidId}
-                  onClick={() => setConfirmOpen(true)}
-                  className="self-start"
+            {!isLoading && !isError && items.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8} className="p-0">
+                  <EmptyState
+                    icon={ArrowLeftRight}
+                    title="No transfers found"
+                    description="There are no transfers matching this filter."
+                  />
+                </TableCell>
+              </TableRow>
+            )}
+
+            {!isLoading &&
+              items.map((transfer, index) => (
+                <TableRow
+                  key={transfer.id}
+                  className="cursor-pointer"
+                  onClick={() => setSelectedId(transfer.id)}
                 >
-                  Reverse transfer
-                </Button>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Reverse this transfer?</DialogTitle>
-                    <DialogDescription>
-                      This is a financial operation: the receiver will be
-                      debited and the original sender credited the full
-                      transfer amount. It cannot be undone, and a transfer
-                      can only be reversed once.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <p className="rounded-lg bg-muted px-3 py-2 font-mono text-xs text-foreground break-all">
-                    {transferId.trim()}
-                  </p>
-                  <DialogFooter>
-                    <DialogClose render={<Button variant="outline" />}>
-                      Cancel
-                    </DialogClose>
-                    <Button
-                      variant="destructive"
-                      disabled={reverseMutation.isPending}
-                      onClick={handleReverse}
-                    >
-                      {reverseMutation.isPending ? (
-                        <Loader2 className="size-3.5 animate-spin" />
-                      ) : (
-                        "Confirm reversal"
-                      )}
-                    </Button>
-                  </DialogFooter>
-                </DialogContent>
-              </Dialog>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Status</span>
-                <StatusBadge variant="success">{result.status}</StatusBadge>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Reversal reference</span>
-                <span className="font-mono text-xs text-foreground">{result.referenceId}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Processed at</span>
-                <span className="text-foreground">{formatDate(result.processedAt)}</span>
-              </div>
-              <Button variant="outline" className="mt-2 self-start" onClick={startOver}>
-                Reverse another transfer
+                  <TableCell className="text-muted-foreground text-center">
+                    {computeSerial(page, PAGE_SIZE, index)}
+                  </TableCell>
+                  <TableCell className="font-mono text-xs">{transfer.reference}</TableCell>
+                  <TableCell>
+                    <p className="font-medium text-foreground">{transfer.sender.name}</p>
+                    <p className="text-xs text-muted-foreground">{transfer.sender.mobile}</p>
+                  </TableCell>
+                  <TableCell>
+                    <p className="font-medium text-foreground">{transfer.recipient.name}</p>
+                    <p className="text-xs text-muted-foreground">{transfer.recipient.mobile}</p>
+                  </TableCell>
+                  <TableCell>{formatAmount(transfer.amount)}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatAmount(transfer.fee)}
+                  </TableCell>
+                  <TableCell>
+                    <StatusBadge variant={transferStatusVariant(transfer.status)}>
+                      {transferStatusLabel(transfer.status)}
+                    </StatusBadge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {formatDate(transfer.createdAt)}
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+
+        {isError && (
+          <EmptyState
+            icon={ArrowLeftRight}
+            title="Failed to load transfers"
+            description={getApiErrorMessage(error)}
+          />
+        )}
+
+        {meta && meta.totalPages > 1 && (
+          <div className="flex items-center justify-between gap-4 border-t border-border px-4 py-3">
+            <p className="text-xs text-muted-foreground">
+              Page {meta.page} of {meta.totalPages} · {meta.totalItems} total
+            </p>
+            <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!meta.hasPreviousPage || isFetching}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={!meta.hasNextPage || isFetching}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </div>
+        )}
+      </div>
+
+      <TransferDetailSheet
+        transferId={selectedId}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+      />
     </PageLayout>
   )
 }

@@ -1,8 +1,3 @@
-export const AUTH_COOKIE_NAMES = {
-    ACCESS_TOKEN: 'access_token',
-    REFRESH_TOKEN: 'refresh_token',
-} as const;
-
 export const AUTH_LIMITS = {
     PASSWORD_MIN_LENGTH: 8,
     PASSWORD_MAX_LENGTH: 128,
