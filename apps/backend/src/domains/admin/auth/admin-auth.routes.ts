@@ -1,11 +1,11 @@
 import { Router } from 'express';
 
-import { requireAdminAuth } from '../../middleware/auth.middleware.js';
+import { requireAdminAuth } from '../../../middleware/auth.middleware.js';
 import {
     adminLoginRateLimit,
     adminRefreshRateLimit,
-} from '../../middleware/rate-limit.middleware.js';
-import { validateBody } from '../../middleware/validation.middleware.js';
+} from '../../../middleware/rate-limit.middleware.js';
+import { validateBody } from '../../../middleware/validation.middleware.js';
 
 import {
     adminLoginController,

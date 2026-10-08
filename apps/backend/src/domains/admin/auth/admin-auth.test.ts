@@ -15,11 +15,11 @@ import { eq, inArray } from 'drizzle-orm';
 import request from 'supertest';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import app from '../../app.js';
-import { hashPassword } from '../../lib/auth/auth.js';
-import { connectRedis, disconnectRedis, redis } from '../../lib/redis.js';
+import app from '../../../app.js';
+import { hashPassword } from '../../../lib/auth/auth.js';
+import { connectRedis, disconnectRedis, redis } from '../../../lib/redis.js';
 
-import { register } from '../auth/auth.service.js';
+import { register } from '../../auth/auth.service.js';
 
 const TEST_PASSWORD = 'AdminPass123!';
 

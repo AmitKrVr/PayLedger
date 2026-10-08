@@ -7,7 +7,7 @@ import {
     type DatabaseOrTransaction,
 } from '@payledger/database';
 
-import type { CreateAdminSessionInput } from '../auth/auth.types.js';
+import type { CreateAdminSessionInput } from '../../auth/auth.types.js';
 
 export const findAdminByEmail = async (
     email: string,

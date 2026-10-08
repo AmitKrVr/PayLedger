@@ -5,17 +5,17 @@ import type {
     Response,
 } from 'express';
 
-import { SUCCESS_CODES } from '../../constants/response.constants.js';
-import { SUCCESS_MESSAGES } from '../../constants/message.constants.js';
+import { SUCCESS_CODES } from '../../../constants/response.constants.js';
+import { SUCCESS_MESSAGES } from '../../../constants/message.constants.js';
 import {
     clearAuthCookies,
     getAccessTokenCookieName,
     getRefreshTokenCookieName,
     setAuthCookies,
-} from '../../lib/auth/cookies.js';
-import { sendSuccess } from '../../lib/http.js';
+} from '../../../lib/auth/cookies.js';
+import { sendSuccess } from '../../../lib/http.js';
 
-import type { RequestContext } from '../auth/auth.types.js';
+import type { RequestContext } from '../../auth/auth.types.js';
 
 import {
     getAdminProfile,
