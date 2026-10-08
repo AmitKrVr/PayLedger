@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
 
 import {
     closeConnection,
@@ -17,7 +18,7 @@ import {
 } from '@payledger/database';
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import request from 'supertest';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import app from '../../app.js';
 import { hashPassword } from '../../lib/auth/auth.js';
@@ -37,6 +38,55 @@ const ADMIN_PASSWORD = 'AdminPass123!';
 const createdAdminIds: string[] = [];
 const createdUserIds: string[] = [];
 const createdWalletIds: string[] = [];
+
+// A tiny local stand-in for the Fake Payment Gateway, bound to a dynamic
+// port and passed explicitly to createPayment()'s gatewayBaseUrl override
+// — this file's own fixtures never depend on a real gateway process.
+let mockGatewayServer: Server;
+let mockGatewayUrl: string;
+
+beforeAll(async () => {
+    mockGatewayServer = createServer((req, res) => {
+        let data = '';
+
+        req.on('data', (chunk: Buffer) => {
+            data += chunk.toString('utf8');
+        });
+
+        req.on('end', () => {
+            const parsed = JSON.parse(data) as {
+                orderId: string;
+                amount: number;
+            };
+
+            res.writeHead(201, { 'Content-Type': 'application/json' });
+            res.end(
+                JSON.stringify({
+                    success: true,
+                    code: 'CREATED',
+                    message: 'Operation successful',
+                    requestId: randomUUID(),
+                    data: {
+                        id: randomUUID(),
+                        orderId: parsed.orderId,
+                        paymentId: randomUUID(),
+                        amount: parsed.amount / 100,
+                        currency: 'INR',
+                        status: 'CREATED',
+                    },
+                }),
+            );
+        });
+    });
+
+    await new Promise<void>((resolve) => {
+        mockGatewayServer.listen(0, '127.0.0.1', () => resolve());
+    });
+
+    const address = mockGatewayServer.address();
+    const port = typeof address === 'object' && address ? address.port : 0;
+    mockGatewayUrl = `http://127.0.0.1:${port}`;
+});
 
 const createTestAdmin = async () => {
     const email = `admin.${randomUUID()}@example.com`;
@@ -104,7 +154,12 @@ const createTestUser = async (balancePaise: bigint = 0n) => {
 /** Creates a real COMPLETED DEPOSIT transaction via the Payment domain's
  * own service functions (create + webhook success), never faked. */
 const createDeposit = async (userId: string, amountInr: number) => {
-    const payment = await createPayment(userId, { amount: amountInr }, randomUUID());
+    const payment = await createPayment(
+        userId,
+        { amount: amountInr },
+        randomUUID(),
+        mockGatewayUrl,
+    );
 
     await processPaymentWebhook({
         orderId: payment.orderId,
@@ -239,6 +294,10 @@ describe('Transaction History domain', () => {
                 .where(inArray(adminSessions.adminId, createdAdminIds));
             await db.delete(admins).where(inArray(admins.id, createdAdminIds));
         }
+
+        await new Promise<void>((resolve) => {
+            mockGatewayServer.close(() => resolve());
+        });
 
         await closeConnection();
     });

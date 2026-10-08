@@ -39,4 +39,6 @@ export const ERROR_MESSAGES = {
     PAYMENT_AMOUNT_MISMATCH: 'Webhook amount does not match the payment amount',
     PAYMENT_PROVIDER_MISMATCH: 'Webhook provider does not match the payment provider',
     INVALID_WEBHOOK_SIGNATURE: 'Invalid webhook signature',
+    PAYMENT_GATEWAY_ERROR:
+        'Unable to create the payment order with the payment gateway',
 } as const;

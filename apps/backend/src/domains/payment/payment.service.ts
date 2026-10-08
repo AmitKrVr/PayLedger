@@ -10,6 +10,7 @@ import {
     NotFoundError,
 } from '../../middleware/error.middleware.js';
 
+import { createGatewayPayment } from '../../integrations/payment-gateway/payment-gateway.client.js';
 import { creditWallet } from '../wallet/wallet.operations.js';
 import { findWalletByUserId } from '../wallet/wallet.repository.js';
 
@@ -19,6 +20,7 @@ import {
     findPaymentByIdForUser,
     findPaymentByOrderIdForUpdate,
     findPaymentByUserAndIdempotencyKey,
+    updatePaymentGatewayInfo,
     updatePaymentStatus,
     updatePaymentSuccess,
 } from './payment.repository.js';
@@ -61,6 +63,7 @@ export const createPayment = async (
     userId: string,
     input: CreatePaymentInput,
     idempotencyKeyHeader: string | undefined,
+    gatewayBaseUrl?: string,
 ): Promise<PaymentResponse> => {
     const { 'idempotency-key': idempotencyKey } =
         idempotencyKeyHeaderSchema.parse({
@@ -77,19 +80,16 @@ export const createPayment = async (
     }
 
     const amountPaise = inrToPaise(input.amount);
-
-    // Stands in for the Fake Payment Gateway's "create order" response,
-    // which isn't implemented yet — generated locally with the same
-    // business-ID mechanism so swapping in a real HTTP call later only
-    // touches this one line.
     const orderId = generateBusinessId();
 
     const expiresAt = new Date(
         Date.now() + env.PAYMENT_EXPIRY_MINUTES * 60 * 1000,
     );
 
+    let payment;
+
     try {
-        const payment = await createPaymentRecord({
+        payment = await createPaymentRecord({
             userId,
             orderId,
             provider: PAYMENT_PROVIDER,
@@ -97,8 +97,6 @@ export const createPayment = async (
             idempotencyKey,
             expiresAt,
         });
-
-        return toPaymentResponse(payment);
     } catch (error) {
         // Two requests with the same Idempotency-Key racing past the
         // findPaymentByUserAndIdempotencyKey check above both try to
@@ -115,6 +113,38 @@ export const createPayment = async (
                 return toPaymentResponse(existingAfterRace);
             }
         }
+
+        throw error;
+    }
+
+    // The PayLedger payment row is already committed (a single INSERT is
+    // its own atomic unit) — the gateway call below happens with no DB
+    // transaction open, so a slow or failing upstream call never holds a
+    // connection or row lock.
+    try {
+        const gatewayOrder = await createGatewayPayment(
+            { orderId, amountPaise },
+            gatewayBaseUrl,
+        );
+
+        const updated = await updatePaymentGatewayInfo(payment.id, {
+            paymentId: gatewayOrder.paymentId,
+        });
+
+        return toPaymentResponse(updated);
+    } catch (error) {
+        // No real order exists at the provider — mark the row FAILED so
+        // the client never treats it as usable, and no future webhook
+        // for this orderId can complete it into a credit.
+        await updatePaymentStatus(
+            payment.id,
+            {
+                status: PaymentStatus.FAILED,
+                failureReason:
+                    'Failed to create the payment order with the payment gateway',
+            },
+            db,
+        );
 
         throw error;
     }

@@ -1,4 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto';
+import { createServer, type Server } from 'node:http';
 
 import { env } from '@payledger/config';
 import {
@@ -9,22 +10,82 @@ import {
     transactions,
     users,
     wallets,
+    PaymentStatus,
     WalletStatus,
 } from '@payledger/database';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import app from '../../app.js';
+import { inrToPaise } from '../../lib/money.js';
 
 import { register } from '../auth/auth.service.js';
 import { findWalletByUserId } from '../wallet/wallet.repository.js';
 
 import { verifyWebhookSignature } from './payment.controller.js';
+import { createPayment } from './payment.service.js';
 
 const ACCESS_TOKEN_COOKIE = 'access_token';
 
 const createdUserIds: string[] = [];
+
+/**
+ * Stands in for the Fake Payment Gateway at its real configured address
+ * (env.PAYMENT_GATEWAY_BASE_URL, http://localhost:5002 by default) for
+ * the duration of this file — createPayment() always calls that address
+ * when no override is given, so every pre-existing test below that goes
+ * through the real HTTP controller (createPaymentFor) transparently
+ * integrates with this mock instead of requiring a manually-run gateway.
+ * Always responds CREATED, echoing back the request's own orderId/amount.
+ */
+let defaultMockGatewayServer: Server;
+
+beforeAll(async () => {
+    const gatewayUrl = new URL(env.PAYMENT_GATEWAY_BASE_URL);
+
+    defaultMockGatewayServer = createServer((req, res) => {
+        let data = '';
+
+        req.on('data', (chunk: Buffer) => {
+            data += chunk.toString('utf8');
+        });
+
+        req.on('end', () => {
+            const parsed = JSON.parse(data) as {
+                orderId: string;
+                amount: number;
+            };
+
+            res.writeHead(201, { 'Content-Type': 'application/json' });
+            res.end(
+                JSON.stringify({
+                    success: true,
+                    code: 'CREATED',
+                    message: 'Operation successful',
+                    requestId: randomUUID(),
+                    data: {
+                        id: randomUUID(),
+                        orderId: parsed.orderId,
+                        paymentId: randomUUID(),
+                        amount: parsed.amount / 100,
+                        currency: 'INR',
+                        status: 'CREATED',
+                    },
+                }),
+            );
+        });
+    });
+
+    await new Promise<void>((resolve, reject) => {
+        defaultMockGatewayServer.once('error', reject);
+        defaultMockGatewayServer.listen(
+            Number(gatewayUrl.port),
+            gatewayUrl.hostname,
+            () => resolve(),
+        );
+    });
+});
 
 const createTestUser = async () => {
     const mobile = `9${Math.floor(100000000 + Math.random() * 899999999)}`;
@@ -114,6 +175,10 @@ describe('Payment domain', () => {
             await db.delete(wallets).where(eq(wallets.userId, userId));
             await db.delete(users).where(eq(users.id, userId));
         }
+
+        await new Promise<void>((resolve) => {
+            defaultMockGatewayServer.close(() => resolve());
+        });
 
         await closeConnection();
     });
@@ -220,6 +285,30 @@ describe('Payment domain', () => {
 
             expect(first.body.data.id).not.toBe(second.body.data.id);
         });
+
+        it('concurrent duplicate Idempotency-Key requests only create one payment', async () => {
+            const user = await createTestUser();
+            const key = randomUUID();
+
+            const results = await Promise.all([
+                createPaymentFor(user.cookie, 500, key),
+                createPaymentFor(user.cookie, 500, key),
+            ]);
+
+            for (const res of results) {
+                expect(res.status).toBe(201);
+            }
+
+            const ids = new Set(results.map((res) => res.body.data.id));
+            expect(ids.size).toBe(1);
+
+            const rows = await db
+                .select()
+                .from(payments)
+                .where(eq(payments.userId, user.userId));
+
+            expect(rows).toHaveLength(1);
+        });
     });
 
     describe('GET /api/v1/payments/:id', () => {
@@ -295,6 +384,17 @@ describe('Payment domain', () => {
                 .from(payments)
                 .where(eq(payments.id, created.body.data.id));
             expect(payment?.status).toBe('CREATED');
+        });
+
+        it('rejects a webhook whose orderId does not match any payment', async () => {
+            const res = await postWebhook({
+                orderId: `nonexistent-${randomUUID()}`,
+                paymentId: randomUUID(),
+                status: 'SUCCESS',
+                amount: 100000,
+            });
+
+            expect(res.status).toBe(404);
         });
 
         it('marks a failed webhook as FAILED without crediting the wallet', async () => {
@@ -515,6 +615,523 @@ describe('Payment domain', () => {
                 .from(transactions)
                 .where(eq(transactions.sourceId, payment!.id));
             expect(depositTx).toBeUndefined();
+        });
+    });
+
+    describe('createPayment → Fake Payment Gateway integration', () => {
+        type GatewayRequestBody = {
+            orderId: string;
+            amount: number;
+            currency: string;
+        };
+
+        type GatewayResponder = (
+            body: GatewayRequestBody,
+        ) => { statusCode: number; payload: unknown };
+
+        /** A per-test controlled gateway, bound to a throwaway dynamic
+         * port and passed explicitly via createPayment()'s gatewayBaseUrl
+         * override — never touches the real/default gateway address. */
+        const startControlledGateway = async (responder: GatewayResponder) => {
+            const calls: GatewayRequestBody[] = [];
+
+            const server = createServer((req, res) => {
+                let data = '';
+
+                req.on('data', (chunk: Buffer) => {
+                    data += chunk.toString('utf8');
+                });
+
+                req.on('end', () => {
+                    const body = JSON.parse(data) as GatewayRequestBody;
+                    calls.push(body);
+
+                    const { statusCode, payload } = responder(body);
+
+                    res.writeHead(statusCode, {
+                        'Content-Type': 'application/json',
+                    });
+                    res.end(
+                        typeof payload === 'string'
+                            ? payload
+                            : JSON.stringify(payload),
+                    );
+                });
+            });
+
+            await new Promise<void>((resolve) => {
+                server.listen(0, '127.0.0.1', () => resolve());
+            });
+
+            const address = server.address();
+            const port =
+                typeof address === 'object' && address ? address.port : 0;
+
+            return {
+                url: `http://127.0.0.1:${port}`,
+                calls,
+                close: () =>
+                    new Promise<void>((resolve) => server.close(() => resolve())),
+            };
+        };
+
+        const successPayload = (
+            body: GatewayRequestBody,
+            overrides: Partial<{
+                orderId: string;
+                amount: number;
+                currency: string;
+                status: string;
+            }> = {},
+        ) => ({
+            success: true,
+            code: 'CREATED',
+            message: 'Operation successful',
+            requestId: randomUUID(),
+            data: {
+                id: randomUUID(),
+                orderId: overrides.orderId ?? body.orderId,
+                paymentId: randomUUID(),
+                amount: overrides.amount ?? body.amount / 100,
+                currency: overrides.currency ?? 'INR',
+                status: overrides.status ?? 'CREATED',
+            },
+        });
+
+        it('calls the gateway when creating a payment', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(gateway.calls).toHaveLength(1);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('sends the same PayLedger orderId it generated', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                const result = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(gateway.calls[0]?.orderId).toBe(result.orderId);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('sends the amount in paise, not INR', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                await createPayment(
+                    user.userId,
+                    { amount: 1500 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(gateway.calls[0]?.amount).toBe(
+                    Number(inrToPaise(1500)),
+                );
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('sends currency INR', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(gateway.calls[0]?.currency).toBe('INR');
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it("persists the gateway's response onto the PayLedger payment row", async () => {
+            const user = await createTestUser();
+            let issuedPaymentId = '';
+            const gateway = await startControlledGateway((body) => {
+                issuedPaymentId = randomUUID();
+                return {
+                    statusCode: 201,
+                    payload: {
+                        success: true,
+                        code: 'CREATED',
+                        message: 'Operation successful',
+                        requestId: randomUUID(),
+                        data: {
+                            id: randomUUID(),
+                            orderId: body.orderId,
+                            paymentId: issuedPaymentId,
+                            amount: body.amount / 100,
+                            currency: 'INR',
+                            status: 'CREATED',
+                        },
+                    },
+                };
+            });
+
+            try {
+                const result = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                const [row] = await db
+                    .select()
+                    .from(payments)
+                    .where(eq(payments.id, result.id));
+
+                expect(row?.paymentId).toBe(issuedPaymentId);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('stores the FAKE_GATEWAY provider', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                const result = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                const [row] = await db
+                    .select()
+                    .from(payments)
+                    .where(eq(payments.id, result.id));
+
+                expect(row?.provider).toBe('FAKE_GATEWAY');
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('returns the existing PayLedger response contract to the client', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                const result = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(result).toMatchObject({
+                    amount: 1000,
+                    status: 'CREATED',
+                });
+                expect(result.id).toBeTruthy();
+                expect(result.orderId).toBeTruthy();
+                expect(result.expiresAt).toBeInstanceOf(Date);
+                expect(result).not.toHaveProperty('paymentId');
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('does not call the gateway twice for the same Idempotency-Key', async () => {
+            const user = await createTestUser();
+            const key = randomUUID();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    key,
+                    gateway.url,
+                );
+                await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    key,
+                    gateway.url,
+                );
+
+                expect(gateway.calls).toHaveLength(1);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('returns the existing payment for a repeated Idempotency-Key', async () => {
+            const user = await createTestUser();
+            const key = randomUUID();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                const first = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    key,
+                    gateway.url,
+                );
+                const second = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    key,
+                    gateway.url,
+                );
+
+                expect(second.id).toBe(first.id);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('creates a new gateway order for a different Idempotency-Key', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body),
+            }));
+
+            try {
+                const first = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                const second = await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+
+                expect(second.id).not.toBe(first.id);
+                expect(gateway.calls).toHaveLength(2);
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('handles a gateway non-2xx response safely', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway(() => ({
+                statusCode: 500,
+                payload: { success: false, message: 'boom' },
+            }));
+
+            try {
+                await expect(
+                    createPayment(
+                        user.userId,
+                        { amount: 1000 },
+                        randomUUID(),
+                        gateway.url,
+                    ),
+                ).rejects.toMatchObject({ statusCode: expect.any(Number) });
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('handles an unreachable gateway safely', async () => {
+            const user = await createTestUser();
+
+            // Port 1 is reserved and refuses connections — a fast,
+            // deterministic stand-in for "gateway unavailable"; the same
+            // AbortError/fetch-rejection path also covers a real timeout.
+            await expect(
+                createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    'http://127.0.0.1:1',
+                ),
+            ).rejects.toMatchObject({ statusCode: expect.any(Number) });
+        });
+
+        it('rejects a malformed gateway response', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway(() => ({
+                statusCode: 201,
+                payload: { success: true, data: { foo: 'bar' } },
+            }));
+
+            try {
+                await expect(
+                    createPayment(
+                        user.userId,
+                        { amount: 1000 },
+                        randomUUID(),
+                        gateway.url,
+                    ),
+                ).rejects.toThrow();
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('rejects a gateway response with a mismatched orderId', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body, { orderId: 'not-the-real-order-id' }),
+            }));
+
+            try {
+                await expect(
+                    createPayment(
+                        user.userId,
+                        { amount: 1000 },
+                        randomUUID(),
+                        gateway.url,
+                    ),
+                ).rejects.toThrow();
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('rejects a gateway response with a mismatched amount', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body, { amount: 1 }),
+            }));
+
+            try {
+                await expect(
+                    createPayment(
+                        user.userId,
+                        { amount: 1000 },
+                        randomUUID(),
+                        gateway.url,
+                    ),
+                ).rejects.toThrow();
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('rejects a gateway response with a status other than CREATED', async () => {
+            const user = await createTestUser();
+            const gateway = await startControlledGateway((body) => ({
+                statusCode: 201,
+                payload: successPayload(body, { status: 'SUCCESS' }),
+            }));
+
+            try {
+                await expect(
+                    createPayment(
+                        user.userId,
+                        { amount: 1000 },
+                        randomUUID(),
+                        gateway.url,
+                    ),
+                ).rejects.toThrow();
+            } finally {
+                await gateway.close();
+            }
+        });
+
+        it('marks the PayLedger payment FAILED when the gateway call fails, and never credits the wallet, creates a DEPOSIT transaction, or creates ledger entries', async () => {
+            const user = await createTestUser();
+            const balanceBefore = await getWalletBalance(user.walletId);
+            const gateway = await startControlledGateway(() => ({
+                statusCode: 500,
+                payload: { success: false, message: 'boom' },
+            }));
+
+            let failedPaymentId: string | undefined;
+
+            try {
+                await createPayment(
+                    user.userId,
+                    { amount: 1000 },
+                    randomUUID(),
+                    gateway.url,
+                );
+                throw new Error('expected createPayment to reject');
+            } catch {
+                const [row] = await db
+                    .select()
+                    .from(payments)
+                    .where(eq(payments.userId, user.userId));
+
+                failedPaymentId = row?.id;
+                expect(row?.status).toBe(PaymentStatus.FAILED);
+                expect(row?.failureReason).toBeTruthy();
+            } finally {
+                await gateway.close();
+            }
+
+            expect(await getWalletBalance(user.walletId)).toBe(balanceBefore);
+
+            const txns = failedPaymentId
+                ? await db
+                    .select()
+                    .from(transactions)
+                    .where(eq(transactions.sourceId, failedPaymentId))
+                : [];
+            expect(txns).toHaveLength(0);
+
+            const entries = await db
+                .select()
+                .from(ledgerEntries)
+                .where(eq(ledgerEntries.walletId, user.walletId));
+            expect(entries).toHaveLength(0);
         });
     });
 });

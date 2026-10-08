@@ -610,5 +610,29 @@ describe('Admin Withdrawal domain', () => {
 
             expect(res.status).toBe(422);
         });
+
+        it('two concurrent rejections of the same withdrawal: exactly one succeeds', async () => {
+            const adminA = await createTestAdmin();
+            const adminB = await createTestAdmin();
+            const fixture = await createUserWithWithdrawal(500000n, 1000);
+
+            const [resA, resB] = await Promise.all([
+                rejectWithdrawalReq(adminA.cookie, fixture.withdrawalId, 'First'),
+                rejectWithdrawalReq(adminB.cookie, fixture.withdrawalId, 'Second'),
+            ]);
+
+            const statuses = [resA.status, resB.status].sort();
+            expect(statuses).toEqual([200, 409]);
+
+            const wallet = await getWallet(fixture.walletId);
+            expect(wallet.balancePaise).toBe(500000n);
+            expect(wallet.heldPaise).toBe(0n);
+
+            const [row] = await db
+                .select()
+                .from(withdrawals)
+                .where(eq(withdrawals.id, fixture.withdrawalId));
+            expect(row?.status).toBe('REJECTED');
+        });
     });
 });

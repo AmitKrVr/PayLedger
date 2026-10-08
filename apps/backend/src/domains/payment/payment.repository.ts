@@ -114,6 +114,29 @@ export const updatePaymentStatus = async (
     return payment;
 };
 
+export const updatePaymentGatewayInfo = async (
+    id: string,
+    data: {
+        paymentId: string;
+    },
+    executor: DatabaseOrTransaction = db,
+) => {
+    const [payment] = await executor
+        .update(payments)
+        .set({
+            paymentId: data.paymentId,
+            updatedAt: new Date(),
+        })
+        .where(eq(payments.id, id))
+        .returning();
+
+    if (!payment) {
+        throw new Error('Failed to update payment with gateway information');
+    }
+
+    return payment;
+};
+
 export const updatePaymentSuccess = async (
     id: string,
     data: {

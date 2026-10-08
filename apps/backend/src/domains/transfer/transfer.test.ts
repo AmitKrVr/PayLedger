@@ -340,6 +340,23 @@ describe('Transfer domain', () => {
             expect(res.status).toBe(422);
         });
 
+        it("rejects a transfer when the sender's own wallet is blocked", async () => {
+            const sender = await createTestUser(100000n);
+            const receiver = await createTestUser();
+
+            await db
+                .update(wallets)
+                .set({ status: WalletStatus.BLOCKED })
+                .where(eq(wallets.id, sender.walletId));
+
+            const res = await createTransfer(sender.cookie, receiver.userId, 100);
+
+            expect(res.status).toBe(422);
+
+            const senderWallet = await getWallet(sender.walletId);
+            expect(senderWallet.balancePaise).toBe(100000n);
+        });
+
         it('rejects a transfer when available balance is insufficient', async () => {
             const sender = await createTestUser(5000n); // ₹50
             const receiver = await createTestUser();
